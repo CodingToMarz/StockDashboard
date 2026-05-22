@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.6-visual-contrast-borders"
+APP_VERSION = "v0.3.7-bright-glass-edges"
 MAX_BUBBLES = 4
 PROFILE_PATH = Path("data/profiles.json")
 
@@ -34,36 +34,77 @@ st.markdown(
     """
     <style>
     .stApp {
-        background: radial-gradient(circle at 20% 0%, rgba(37,99,235,.18), transparent 32%), #0b1220;
+        background:
+            radial-gradient(circle at 18% 0%, rgba(59,130,246,.24), transparent 34%),
+            radial-gradient(circle at 86% 10%, rgba(125,211,252,.10), transparent 28%),
+            #0b1220;
         color: #f8fafc;
     }
     header[data-testid="stHeader"] { background: rgba(11,18,32,.84) !important; backdrop-filter: blur(8px); }
-    section[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #2563eb; }
+
+    /* Make the sidebar collapse/reopen affordance much more visible. */
+    header[data-testid="stHeader"] button,
+    header[data-testid="stHeader"] button *,
+    button[title*="sidebar"], button[title*="sidebar"] *,
+    button[aria-label*="sidebar"], button[aria-label*="sidebar"] * {
+        color: #f8fafc !important;
+        -webkit-text-fill-color: #f8fafc !important;
+        fill: #f8fafc !important;
+        opacity: 1 !important;
+        stroke: #f8fafc !important;
+    }
+    header[data-testid="stHeader"] button,
+    button[title*="sidebar"],
+    button[aria-label*="sidebar"] {
+        background: rgba(96,165,250,.72) !important;
+        border: 2px solid rgba(219,234,254,.88) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 0 16px rgba(96,165,250,.62), inset 0 1px 0 rgba(255,255,255,.38) !important;
+    }
+    header[data-testid="stHeader"] button:hover,
+    button[title*="sidebar"]:hover,
+    button[aria-label*="sidebar"]:hover {
+        background: rgba(147,197,253,.92) !important;
+        box-shadow: 0 0 22px rgba(147,197,253,.82), inset 0 1px 0 rgba(255,255,255,.48) !important;
+    }
+
+    section[data-testid="stSidebar"] { background: #0f172a; border-right: 2px solid rgba(147,197,253,.58); }
     .block-container { padding-top: 2.4rem; max-width: 1720px; }
     h1,h2,h3,h4,p,label,span,div { color: #f8fafc; }
     section[data-testid="stSidebar"] * { color: #dbeafe !important; }
 
-    /* BUBBLE WINDOWS: stronger but still glassy/soft. */
+    /* BUBBLE WINDOWS: brighter liquid-glass edge and internal glow. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background:
-            linear-gradient(145deg, rgba(255,255,255,.085), rgba(255,255,255,.018) 40%, rgba(59,130,246,.12)),
-            radial-gradient(circle at 18% 0%, rgba(147,197,253,.28), transparent 36%),
-            linear-gradient(180deg, rgba(17,24,39,.96), rgba(15,23,42,.985)) !important;
-        border: 2px solid rgba(96,165,250,.58) !important;
-        border-radius: 28px !important;
+            linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.03) 34%, rgba(96,165,250,.16)),
+            radial-gradient(circle at 16% 0%, rgba(219,234,254,.34), transparent 36%),
+            radial-gradient(circle at 92% 16%, rgba(125,211,252,.18), transparent 30%),
+            linear-gradient(180deg, rgba(17,24,39,.955), rgba(15,23,42,.99)) !important;
+        border: 3px solid rgba(147,197,253,.72) !important;
+        border-radius: 30px !important;
+        outline: 1px solid rgba(239,246,255,.18) !important;
+        outline-offset: -5px !important;
         box-shadow:
-            0 26px 52px rgba(0,0,0,.42),
-            0 0 0 1px rgba(219,234,254,.08),
-            0 0 34px rgba(37,99,235,.28),
-            inset 0 1px 0 rgba(255,255,255,.16),
-            inset 0 -24px 40px rgba(15,23,42,.44) !important;
-        padding: 18px 20px 14px 20px !important;
-        margin-bottom: 24px !important;
+            0 28px 56px rgba(0,0,0,.46),
+            0 0 0 1px rgba(219,234,254,.18),
+            0 0 34px rgba(96,165,250,.38),
+            0 0 72px rgba(59,130,246,.20),
+            inset 0 1px 0 rgba(255,255,255,.30),
+            inset 0 0 28px rgba(147,197,253,.11),
+            inset 0 -28px 46px rgba(15,23,42,.50) !important;
+        padding: 20px 22px 16px 22px !important;
+        margin-bottom: 28px !important;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]::before {
+        content: ""; display: block; height: 2px; border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.62), rgba(191,219,254,.40), transparent);
+        filter: blur(.15px);
+        margin-bottom: 12px;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]::after {
         content: ""; display: block; height: 1px; border-radius: 999px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
-        margin-bottom: 10px;
+        background: linear-gradient(90deg, rgba(96,165,250,.0), rgba(96,165,250,.34), rgba(96,165,250,.0));
+        margin-top: 10px;
     }
 
     /* BUTTONS ONLY: keep readable text, avoid leaking into checkboxes/code blocks. */
@@ -95,24 +136,19 @@ st.markdown(
     /* CHECKBOXES: visible selected state. */
     div[data-testid="stCheckbox"] label,
     div[data-testid="stCheckbox"] label * { color: #bfdbfe !important; font-weight: 700 !important; }
-    div[data-testid="stCheckbox"] input[type="checkbox"] {
-        accent-color: #60a5fa !important;
-    }
+    div[data-testid="stCheckbox"] input[type="checkbox"] { accent-color: #60a5fa !important; }
     div[data-testid="stCheckbox"] [data-baseweb="checkbox"] > div:first-child {
-        border: 2px solid #60a5fa !important;
+        border: 2px solid #93c5fd !important;
         background: #0f172a !important;
+        box-shadow: 0 0 10px rgba(147,197,253,.22) !important;
     }
     div[data-testid="stCheckbox"] [aria-checked="true"] > div:first-child,
     div[data-testid="stCheckbox"] [data-checked="true"] > div:first-child {
         background: #60a5fa !important;
-        border-color: #93c5fd !important;
-        box-shadow: 0 0 0 2px rgba(96,165,250,.25) !important;
+        border-color: #dbeafe !important;
+        box-shadow: 0 0 0 2px rgba(96,165,250,.28), 0 0 16px rgba(147,197,253,.42) !important;
     }
-    div[data-testid="stCheckbox"] svg {
-        color: #020617 !important;
-        fill: #020617 !important;
-        stroke: #020617 !important;
-    }
+    div[data-testid="stCheckbox"] svg { color: #020617 !important; fill: #020617 !important; stroke: #020617 !important; }
 
     /* Inputs and dropdowns. */
     input, textarea, input *, textarea * { color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important; }
@@ -129,7 +165,7 @@ st.markdown(
     div[role="option"]:hover, li[role="option"]:hover { background: #dbeafe !important; }
 
     /* Expander and diagnostics: no black highlight leakage. */
-    div[data-testid="stExpander"] { background: #111827 !important; border: 1px solid #334155 !important; border-radius: 14px !important; }
+    div[data-testid="stExpander"] { background: rgba(17,24,39,.96) !important; border: 1px solid rgba(147,197,253,.36) !important; border-radius: 14px !important; }
     div[data-testid="stExpander"] summary, div[data-testid="stExpander"] summary *, div[data-testid="stExpander"] details, div[data-testid="stExpander"] p, div[data-testid="stExpander"] span {
         background: transparent !important; color: #f8fafc !important; fill: #f8fafc !important;
     }
@@ -142,8 +178,8 @@ st.markdown(
 
     .bubble-title { font-size: 1.05rem; font-weight: 900; color: #f8fafc !important; margin-bottom: 4px; }
     .bubble-subtitle { font-size: .78rem; color: #93c5fd !important; margin-bottom: 10px; }
-    .bubble-footer { font-size: .75rem; color: #94a3b8 !important; border-top: 1px solid rgba(148,163,184,.28); margin-top: 8px; padding-top: 8px; }
-    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.35); border-radius: 16px; padding: 10px; }
+    .bubble-footer { font-size: .75rem; color: #bfdbfe !important; border-top: 1px solid rgba(191,219,254,.34); margin-top: 8px; padding-top: 8px; }
+    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.45); border-radius: 16px; padding: 10px; }
     div[data-testid="stMetricLabel"] p { color: #93c5fd !important; font-weight: 700; }
     div[data-testid="stMetricValue"] { color: #f8fafc !important; }
     .stRadio label, .stSelectbox label, .stTextInput label { color: #bfdbfe !important; font-weight: 700; }
