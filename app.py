@@ -8,20 +8,20 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.2.3-yahoo-fallback"
+APP_VERSION = "v0.2.4-readable-gap-fix"
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
 PROFILE_PATH = Path("data/profiles.json")
 
 PERIOD_CONFIG = {
-    "1D": {"period": "1d", "interval": "5m", "show_ma": False},
-    "5D": {"period": "5d", "interval": "15m", "show_ma": False},
-    "1M": {"period": "1mo", "interval": "1d", "show_ma": True},
-    "6M": {"period": "6mo", "interval": "1d", "show_ma": True},
-    "1Y": {"period": "1y", "interval": "1d", "show_ma": True},
-    "5Y": {"period": "5y", "interval": "1wk", "show_ma": True},
-    "MAX": {"period": "max", "interval": "1mo", "show_ma": True},
+    "1D": {"period": "1d", "interval": "5m", "show_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
+    "5D": {"period": "5d", "interval": "15m", "show_ma": False, "rangebreaks": [dict(bounds=["sat", "mon"]), dict(bounds=[16, 9.5], pattern="hour")]},
+    "1M": {"period": "1mo", "interval": "1d", "show_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
+    "6M": {"period": "6mo", "interval": "1d", "show_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
+    "1Y": {"period": "1y", "interval": "1d", "show_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
+    "5Y": {"period": "5y", "interval": "1wk", "show_ma": True, "rangebreaks": []},
+    "MAX": {"period": "max", "interval": "1mo", "show_ma": True, "rangebreaks": []},
 }
 
 st.markdown(
@@ -29,39 +29,64 @@ st.markdown(
     <style>
     .stApp {
         background: #0b1220;
-        color: #e5e7eb;
+        color: #f8fafc;
     }
     section[data-testid="stSidebar"] {
         background-color: #0f172a;
-        border-right: 1px solid #1e40af;
+        border-right: 1px solid #2563eb;
     }
     .block-container {
         padding-top: 1.2rem;
         padding-bottom: 2.5rem;
         max-width: 1500px;
     }
+    h1, h2, h3, h4, p, label, span, div {
+        color: #f8fafc;
+    }
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] div {
+        color: #dbeafe !important;
+    }
     .version-pill {
         display: inline-block;
-        background: #1d4ed8;
-        color: #dbeafe;
+        background: #2563eb;
+        color: #ffffff !important;
         padding: 6px 10px;
         border-radius: 999px;
         font-size: 0.78rem;
-        font-weight: 700;
+        font-weight: 800;
         margin-bottom: 0.75rem;
+        letter-spacing: 0.02em;
     }
     .status-card {
         background: #111827;
-        border: 1px solid #1f2937;
+        border: 1px solid #334155;
         border-radius: 14px;
         padding: 14px 16px;
         margin: 10px 0 16px 0;
+        color: #f8fafc !important;
     }
     div[data-testid="stMetric"] {
         background-color: #111827;
-        border: 1px solid #1f2937;
+        border: 1px solid #334155;
         border-radius: 14px;
         padding: 12px;
+    }
+    div[data-testid="stMetricLabel"] p,
+    div[data-testid="stMetricValue"] {
+        color: #f8fafc !important;
+    }
+    div[data-testid="stMetricLabel"] p {
+        color: #93c5fd !important;
+        font-weight: 700;
+    }
+    .stRadio label,
+    .stSelectbox label,
+    .stTextInput label {
+        color: #bfdbfe !important;
+        font-weight: 700;
     }
     </style>
     """,
@@ -83,20 +108,11 @@ def save_profiles(profiles: dict) -> None:
 
 def yahoo_direct_request(ticker: str, interval: str, range_value: str):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-
-    params = {
-        "interval": interval,
-        "range": range_value,
-        "includePrePost": "false",
-    }
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    params = {"interval": interval, "range": range_value, "includePrePost": "false"}
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     response = requests.get(url, params=params, headers=headers, timeout=10)
     response.raise_for_status()
-
     data = response.json()
 
     result = data.get("chart", {}).get("result")
@@ -104,7 +120,6 @@ def yahoo_direct_request(ticker: str, interval: str, range_value: str):
         return pd.DataFrame()
 
     result = result[0]
-
     timestamps = result.get("timestamp")
     quote = result.get("indicators", {}).get("quote", [{}])[0]
 
@@ -121,14 +136,12 @@ def yahoo_direct_request(ticker: str, interval: str, range_value: str):
 
     df.index = pd.to_datetime(timestamps, unit="s")
     df = df.dropna(subset=["Open", "High", "Low", "Close"])
-
     return df
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_price_data(ticker: str, period: str, interval: str):
     connector_used = "yfinance"
-
     try:
         data = yf.download(
             tickers=ticker,
@@ -144,12 +157,10 @@ def get_price_data(ticker: str, period: str, interval: str):
     if not data.empty:
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
-
         data = data.dropna(subset=["Open", "High", "Low", "Close"])
 
     if data.empty:
         connector_used = "Yahoo Direct API"
-
         try:
             data = yahoo_direct_request(ticker, interval, period)
         except Exception as exc:
@@ -230,16 +241,18 @@ else:
     )
 
     if config["show_ma"]:
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA20"], mode="lines", name="20 MA"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA50"], mode="lines", name="50 MA"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA200"], mode="lines", name="200 MA"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA20"], mode="lines", name="20 MA", line=dict(color="#f97316", width=1.8)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA50"], mode="lines", name="50 MA", line=dict(color="#14b8a6", width=1.8)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA200"], mode="lines", name="200 MA", line=dict(color="#8b5cf6", width=1.8)), row=1, col=1)
 
+    volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
     fig.add_trace(
         go.Bar(
             x=chart_df.index,
             y=chart_df["Volume"],
             name="Volume",
-            opacity=0.45,
+            opacity=0.55,
+            marker_color=volume_colors,
         ),
         row=2,
         col=1,
@@ -250,8 +263,29 @@ else:
         height=760,
         paper_bgcolor="#0b1220",
         plot_bgcolor="#0b1220",
+        font=dict(color="#e5e7eb", size=13),
+        title_font=dict(color="#f8fafc", size=20),
+        legend=dict(font=dict(color="#e5e7eb", size=12)),
         xaxis_rangeslider_visible=False,
+        margin=dict(l=25, r=25, t=45, b=25),
+        hovermode="x unified",
     )
+
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="#334155",
+        tickfont=dict(color="#cbd5e1", size=12),
+        title_font=dict(color="#bfdbfe"),
+        rangebreaks=config["rangebreaks"],
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="#334155",
+        tickfont=dict(color="#cbd5e1", size=12),
+        title_font=dict(color="#bfdbfe"),
+    )
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
 
     st.plotly_chart(fig, use_container_width=True)
     chart_rendered = True
@@ -259,7 +293,7 @@ else:
 st.divider()
 st.subheader("Data connection check")
 
-with st.expander("Show diagnostics", expanded=True):
+with st.expander("Show diagnostics", expanded=False):
     st.write(f"App version: `{APP_VERSION}`")
     st.write(f"Connector used: `{connector_used}`")
     st.write(f"Ticker: `{selected_stock}`")
@@ -267,6 +301,5 @@ with st.expander("Show diagnostics", expanded=True):
     st.write(f"Data status: `{data_status}`")
     st.write(f"Rows returned: `{len(df)}`")
     st.write(f"Chart rendered: `{chart_rendered}`")
-
     if not df.empty:
         st.dataframe(df.tail(10), use_container_width=True)
