@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.2.4-readable-gap-fix"
+APP_VERSION = "v0.2.5-ui-ma-polish"
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
@@ -27,6 +27,22 @@ PERIOD_CONFIG = {
 st.markdown(
     """
     <style>
+    header[data-testid="stHeader"] {
+        display: none !important;
+        height: 0 !important;
+    }
+    div[data-testid="stToolbar"] {
+        display: none !important;
+    }
+    div[data-testid="stDecoration"] {
+        display: none !important;
+    }
+    #MainMenu {
+        visibility: hidden !important;
+    }
+    footer {
+        visibility: hidden !important;
+    }
     .stApp {
         background: #0b1220;
         color: #f8fafc;
@@ -36,7 +52,7 @@ st.markdown(
         border-right: 1px solid #2563eb;
     }
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1.0rem;
         padding-bottom: 2.5rem;
         max-width: 1500px;
     }
@@ -48,6 +64,24 @@ st.markdown(
     section[data-testid="stSidebar"] span,
     section[data-testid="stSidebar"] div {
         color: #dbeafe !important;
+    }
+    input,
+    textarea,
+    div[data-baseweb="select"] input,
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] div {
+        color: #020617 !important;
+    }
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div {
+        background-color: #ffffff !important;
+        color: #020617 !important;
+        border: 1px solid #cbd5e1 !important;
+    }
+    div[role="listbox"] div,
+    div[role="option"] {
+        color: #020617 !important;
+        background-color: #ffffff !important;
     }
     .version-pill {
         display: inline-block;
@@ -191,7 +225,6 @@ selected_stock = st.sidebar.selectbox("Select Stock", profiles[selected_profile]
 selected_period = st.sidebar.radio("Timeframe", list(PERIOD_CONFIG.keys()), index=4)
 config = PERIOD_CONFIG[selected_period]
 
-st.markdown(f'<span class="version-pill">{APP_VERSION}</span>', unsafe_allow_html=True)
 st.title("Stock Dashboard")
 
 with st.spinner(f"Loading {selected_stock} market data..."):
@@ -213,9 +246,9 @@ else:
     chart_df = df.copy()
 
     if config["show_ma"]:
-        chart_df["MA20"] = chart_df["Close"].rolling(window=20).mean()
-        chart_df["MA50"] = chart_df["Close"].rolling(window=50).mean()
-        chart_df["MA200"] = chart_df["Close"].rolling(window=200).mean()
+        chart_df["MA20"] = chart_df["Close"].rolling(window=20, min_periods=1).mean()
+        chart_df["MA50"] = chart_df["Close"].rolling(window=50, min_periods=1).mean()
+        chart_df["MA200"] = chart_df["Close"].rolling(window=200, min_periods=1).mean()
 
     fig = make_subplots(
         rows=2,
@@ -259,15 +292,15 @@ else:
     )
 
     fig.update_layout(
+        title=dict(text=f"{selected_stock} • {selected_period}", font=dict(color="#f8fafc", size=20)),
         template="plotly_dark",
         height=760,
         paper_bgcolor="#0b1220",
         plot_bgcolor="#0b1220",
         font=dict(color="#e5e7eb", size=13),
-        title_font=dict(color="#f8fafc", size=20),
         legend=dict(font=dict(color="#e5e7eb", size=12)),
         xaxis_rangeslider_visible=False,
-        margin=dict(l=25, r=25, t=45, b=25),
+        margin=dict(l=25, r=25, t=55, b=25),
         hovermode="x unified",
     )
 
