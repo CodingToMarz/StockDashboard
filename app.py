@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.0-bubble-layout"
+APP_VERSION = "v0.3.1-dropdown-contrast-fix"
 MAX_BUBBLES = 4
 
 # Future bubble roadmap reminder:
@@ -66,15 +66,20 @@ st.markdown(
     section[data-testid="stSidebar"] span,
     section[data-testid="stSidebar"] div { color: #dbeafe !important; }
 
-    input, textarea {
+    /* HARDENED FORM CONTROL CONTRAST */
+    input, textarea,
+    input *, textarea * {
         color: #020617 !important;
         -webkit-text-fill-color: #020617 !important;
+        caret-color: #020617 !important;
     }
     input::placeholder, textarea::placeholder {
         color: #475569 !important;
         -webkit-text-fill-color: #475569 !important;
         opacity: 1 !important;
     }
+
+    /* Select/input containers */
     div[data-baseweb="select"] > div,
     div[data-baseweb="input"] > div,
     div[data-baseweb="textarea"] > div {
@@ -82,25 +87,57 @@ st.markdown(
         color: #020617 !important;
         border: 1px solid #cbd5e1 !important;
     }
-    div[data-baseweb="select"] span,
-    div[data-baseweb="select"] div,
-    div[data-baseweb="select"] svg,
-    div[data-baseweb="select"] input {
+
+    /* Everything inside select controls, including sidebar + bubble menus */
+    div[data-baseweb="select"],
+    div[data-baseweb="select"] *,
+    div[data-baseweb="input"],
+    div[data-baseweb="input"] *,
+    div[data-baseweb="textarea"],
+    div[data-baseweb="textarea"] * {
         color: #020617 !important;
         fill: #020617 !important;
         -webkit-text-fill-color: #020617 !important;
     }
-    div[role="listbox"], div[role="option"], ul[role="listbox"], li[role="option"] {
+
+    /* BaseWeb popover/dropdown menus render outside the local widget tree */
+    div[data-baseweb="popover"],
+    div[data-baseweb="popover"] *,
+    div[data-baseweb="menu"],
+    div[data-baseweb="menu"] *,
+    div[data-baseweb="select-dropdown"],
+    div[data-baseweb="select-dropdown"] *,
+    ul[role="listbox"],
+    ul[role="listbox"] *,
+    div[role="listbox"],
+    div[role="listbox"] *,
+    li[role="option"],
+    li[role="option"] *,
+    div[role="option"],
+    div[role="option"] * {
         background-color: #ffffff !important;
         color: #020617 !important;
+        fill: #020617 !important;
+        -webkit-text-fill-color: #020617 !important;
+        opacity: 1 !important;
     }
-    div[role="option"] span, li[role="option"] span {
+    li[role="option"]:hover,
+    div[role="option"]:hover,
+    li[aria-selected="true"],
+    div[aria-selected="true"] {
+        background-color: #dbeafe !important;
         color: #020617 !important;
         -webkit-text-fill-color: #020617 !important;
     }
-    div[role="option"]:hover, li[role="option"]:hover {
-        background-color: #dbeafe !important;
-        color: #020617 !important;
+
+    /* Disabled-looking BaseWeb text still needs to be readable */
+    [aria-disabled="true"],
+    [aria-disabled="true"] *,
+    div[data-disabled="true"],
+    div[data-disabled="true"] * {
+        color: #334155 !important;
+        -webkit-text-fill-color: #334155 !important;
+        opacity: 1 !important;
     }
 
     .stButton > button,
@@ -137,7 +174,7 @@ st.markdown(
     }
     div[data-testid="stExpander"] summary p,
     div[data-testid="stExpander"] summary span,
-    div[data-testid="stExpander"] svg {
+    div[data-testid="stExpander"] summary svg {
         color: #f8fafc !important;
         fill: #f8fafc !important;
     }
