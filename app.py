@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.2.5-ui-ma-polish"
+APP_VERSION = "v0.2.6-control-contrast"
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
@@ -27,20 +27,11 @@ PERIOD_CONFIG = {
 st.markdown(
     """
     <style>
-    header[data-testid="stHeader"] {
+    header[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"] {
         display: none !important;
         height: 0 !important;
     }
-    div[data-testid="stToolbar"] {
-        display: none !important;
-    }
-    div[data-testid="stDecoration"] {
-        display: none !important;
-    }
-    #MainMenu {
-        visibility: hidden !important;
-    }
-    footer {
+    #MainMenu, footer {
         visibility: hidden !important;
     }
     .stApp {
@@ -65,24 +56,98 @@ st.markdown(
     section[data-testid="stSidebar"] div {
         color: #dbeafe !important;
     }
-    input,
-    textarea,
-    div[data-baseweb="select"] input,
-    div[data-baseweb="select"] span,
-    div[data-baseweb="select"] div {
+
+    /* Inputs and select boxes: force dark readable text on white controls */
+    input, textarea {
         color: #020617 !important;
+        -webkit-text-fill-color: #020617 !important;
+    }
+    input::placeholder, textarea::placeholder {
+        color: #475569 !important;
+        -webkit-text-fill-color: #475569 !important;
+        opacity: 1 !important;
     }
     div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div {
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="textarea"] > div {
         background-color: #ffffff !important;
         color: #020617 !important;
         border: 1px solid #cbd5e1 !important;
     }
-    div[role="listbox"] div,
-    div[role="option"] {
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] svg,
+    div[data-baseweb="select"] input {
         color: #020617 !important;
-        background-color: #ffffff !important;
+        fill: #020617 !important;
+        -webkit-text-fill-color: #020617 !important;
     }
+    div[role="listbox"],
+    div[role="option"],
+    ul[role="listbox"],
+    li[role="option"] {
+        background-color: #ffffff !important;
+        color: #020617 !important;
+    }
+    div[role="option"] span,
+    li[role="option"] span {
+        color: #020617 !important;
+        -webkit-text-fill-color: #020617 !important;
+    }
+    div[role="option"]:hover,
+    li[role="option"]:hover {
+        background-color: #dbeafe !important;
+        color: #020617 !important;
+    }
+
+    /* Buttons: always readable */
+    .stButton > button,
+    button[kind="secondary"],
+    button[data-testid="baseButton-secondary"] {
+        background-color: #ffffff !important;
+        color: #020617 !important;
+        border: 1px solid #93c5fd !important;
+        font-weight: 800 !important;
+    }
+    .stButton > button p,
+    .stButton > button span,
+    button[kind="secondary"] p,
+    button[kind="secondary"] span,
+    button[data-testid="baseButton-secondary"] p,
+    button[data-testid="baseButton-secondary"] span {
+        color: #020617 !important;
+    }
+    .stButton > button:hover,
+    button[kind="secondary"]:hover,
+    button[data-testid="baseButton-secondary"]:hover {
+        background-color: #dbeafe !important;
+        color: #020617 !important;
+        border-color: #60a5fa !important;
+    }
+
+    /* Expanders: avoid white-on-white when opened */
+    div[data-testid="stExpander"] {
+        background-color: #111827 !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+    }
+    div[data-testid="stExpander"] details,
+    div[data-testid="stExpander"] summary {
+        background-color: #111827 !important;
+        color: #f8fafc !important;
+    }
+    div[data-testid="stExpander"] summary p,
+    div[data-testid="stExpander"] summary span,
+    div[data-testid="stExpander"] svg {
+        color: #f8fafc !important;
+        fill: #f8fafc !important;
+    }
+    div[data-testid="stExpander"] div,
+    div[data-testid="stExpander"] p,
+    div[data-testid="stExpander"] span {
+        color: #f8fafc !important;
+    }
+
     .version-pill {
         display: inline-block;
         background: #2563eb;
