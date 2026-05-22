@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.2.1-blue-debug"
+APP_VERSION = "v0.2.2-layout-debug-bottom"
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
@@ -27,42 +27,43 @@ st.markdown(
     """
     <style>
     .stApp {
-        background: #071f4f !important;
-        color: #e5e7eb !important;
+        background: #0b1220;
+        color: #e5e7eb;
     }
     section[data-testid="stSidebar"] {
-        background-color: #041633 !important;
-        border-right: 2px solid #38bdf8 !important;
+        background-color: #0f172a;
+        border-right: 1px solid #1e40af;
     }
     .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
+        padding-top: 1.2rem;
+        padding-bottom: 2.5rem;
+        max-width: 1500px;
     }
-    h1, h2, h3, p, label, span {
-        color: #f8fafc !important;
+    .version-pill {
+        display: inline-block;
+        background: #1d4ed8;
+        color: #dbeafe;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+    }
+    .status-card {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin: 10px 0 16px 0;
     }
     div[data-testid="stMetric"] {
-        background-color: #08245c;
-        border: 1px solid #38bdf8;
+        background-color: #111827;
+        border: 1px solid #1f2937;
         border-radius: 14px;
-        padding: 14px;
-    }
-    .debug-banner {
-        background: #0ea5e9;
-        color: #00111f !important;
-        padding: 12px 16px;
-        border-radius: 10px;
-        font-weight: 800;
-        margin-bottom: 16px;
-        border: 2px solid #bae6fd;
+        padding: 12px;
     }
     </style>
     """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    f'<div class="debug-banner">RUNNING UPDATED APP: {APP_VERSION} — BLUE DEBUG MODE</div>',
     unsafe_allow_html=True,
 )
 
@@ -80,18 +81,29 @@ def save_profiles(profiles: dict) -> None:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_price_data(ticker: str, period: str, interval: str) -> pd.DataFrame:
-    data = yf.download(
-        tickers=ticker,
-        period=period,
-        interval=interval,
-        auto_adjust=False,
-        progress=False,
-        threads=False,
-    )
+def get_price_data(ticker: str, period: str, interval: str) -> tuple[pd.DataFrame, str]:
+    """Return price data and a status message for debugging."""
+    try:
+        data = yf.download(
+            tickers=ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+    except Exception as exc:
+        return pd.DataFrame(), f"yf.download exception: {exc}"
 
     if data.empty:
-        return data
+        # Fallback through Ticker.history sometimes succeeds when download returns empty.
+        try:
+            data = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
+        except Exception as exc:
+            return pd.DataFrame(), f"yf.download empty; Ticker.history exception: {exc}"
+
+    if data.empty:
+        return pd.DataFrame(), "No rows returned by yfinance."
 
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
@@ -99,18 +111,19 @@ def get_price_data(ticker: str, period: str, interval: str) -> pd.DataFrame:
     required_columns = ["Open", "High", "Low", "Close"]
     missing_columns = [col for col in required_columns if col not in data.columns]
     if missing_columns:
-        st.error(f"Missing expected yfinance columns: {missing_columns}")
-        st.write("Raw columns returned:", list(data.columns))
-        return pd.DataFrame()
+        return pd.DataFrame(), f"Missing expected yfinance columns: {missing_columns}. Raw columns: {list(data.columns)}"
 
     data = data.dropna(subset=required_columns)
-    return data
+    if data.empty:
+        return pd.DataFrame(), "Rows existed but were removed after dropping blank OHLC values."
+
+    return data, "OK"
 
 
 profiles = load_profiles()
 
 st.sidebar.title("Stock Profiles")
-st.sidebar.caption(f"App version: {APP_VERSION}")
+st.sidebar.caption(f"Version: {APP_VERSION}")
 
 selected_profile = st.sidebar.selectbox("Select Profile", list(profiles.keys()))
 
@@ -136,106 +149,114 @@ if not profiles[selected_profile]:
     st.stop()
 
 selected_stock = st.sidebar.selectbox("Select Stock", profiles[selected_profile])
-selected_period = st.sidebar.radio("Timeframe", list(PERIOD_CONFIG.keys()), index=4, horizontal=False)
+selected_period = st.sidebar.radio("Timeframe", list(PERIOD_CONFIG.keys()), index=4)
 config = PERIOD_CONFIG[selected_period]
 
+st.markdown(f'<span class="version-pill">{APP_VERSION}</span>', unsafe_allow_html=True)
 st.title("Stock Dashboard")
 st.caption("Python + Streamlit + yfinance MVP")
 
 with st.spinner(f"Loading {selected_stock} market data..."):
-    df = get_price_data(selected_stock, config["period"], config["interval"])
+    df, data_status = get_price_data(selected_stock, config["period"], config["interval"])
 
-with st.expander("Data connection check", expanded=True):
-    st.write(f"App version: `{APP_VERSION}`")
-    st.write(f"Ticker: `{selected_stock}`")
-    st.write(f"yfinance period: `{config['period']}`")
-    st.write(f"yfinance interval: `{config['interval']}`")
-    st.write(f"Rows returned: `{len(df)}`")
-    st.write(f"Columns returned: `{list(df.columns) if not df.empty else []}`")
-    if not df.empty:
-        st.dataframe(df.tail(10), use_container_width=True)
+chart_rendered = False
 
 if df.empty:
+    st.markdown('<div class="status-card">Chart area reserved. No valid price data is available yet.</div>', unsafe_allow_html=True)
     st.error(
-        f"No price data returned for {selected_stock}. This usually means yfinance could not reach Yahoo Finance, "
-        "the ticker is invalid, or the selected interval is temporarily unavailable."
+        f"No price data returned for {selected_stock}. Try 1Y/6M first. Intraday 1D can fail more often depending on Yahoo/yfinance availability."
     )
-    st.info("Try refreshing the app, choosing another timeframe, or testing a very common ticker like AAPL/MSFT/NVDA.")
-    st.stop()
+else:
+    latest = df.iloc[-1]
+    previous_close = df["Close"].iloc[-2] if len(df) > 1 else latest["Close"]
+    price_change = latest["Close"] - previous_close
+    price_change_pct = (price_change / previous_close) * 100 if previous_close else 0
 
-latest = df.iloc[-1]
-previous_close = df["Close"].iloc[-2] if len(df) > 1 else latest["Close"]
-price_change = latest["Close"] - previous_close
-price_change_pct = (price_change / previous_close) * 100 if previous_close else 0
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Ticker", selected_stock)
+    col2.metric("Last Price", f"${latest['Close']:,.2f}", f"{price_change:+.2f} / {price_change_pct:+.2f}%")
+    col3.metric("Volume", f"{latest.get('Volume', 0):,.0f}")
+    col4.metric("Rows Loaded", f"{len(df):,}")
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Ticker", selected_stock)
-col2.metric("Last Price", f"${latest['Close']:,.2f}", f"{price_change:+.2f} / {price_change_pct:+.2f}%")
-col3.metric("Volume", f"{latest.get('Volume', 0):,.0f}")
-col4.metric("Rows Loaded", f"{len(df):,}")
+    chart_df = df.copy()
+    if config["show_ma"]:
+        chart_df["MA20"] = chart_df["Close"].rolling(window=20).mean()
+        chart_df["MA50"] = chart_df["Close"].rolling(window=50).mean()
+        chart_df["MA200"] = chart_df["Close"].rolling(window=200).mean()
 
-chart_df = df.copy()
-if config["show_ma"]:
-    chart_df["MA20"] = chart_df["Close"].rolling(window=20).mean()
-    chart_df["MA50"] = chart_df["Close"].rolling(window=50).mean()
-    chart_df["MA200"] = chart_df["Close"].rolling(window=200).mean()
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.74, 0.26],
+    )
 
-fig = make_subplots(
-    rows=2,
-    cols=1,
-    shared_xaxes=True,
-    vertical_spacing=0.03,
-    row_heights=[0.74, 0.26],
-)
+    fig.add_trace(
+        go.Candlestick(
+            x=chart_df.index,
+            open=chart_df["Open"],
+            high=chart_df["High"],
+            low=chart_df["Low"],
+            close=chart_df["Close"],
+            name="Price",
+            increasing_line_color="#22c55e",
+            decreasing_line_color="#ef4444",
+        ),
+        row=1,
+        col=1,
+    )
 
-fig.add_trace(
-    go.Candlestick(
-        x=chart_df.index,
-        open=chart_df["Open"],
-        high=chart_df["High"],
-        low=chart_df["Low"],
-        close=chart_df["Close"],
-        name="Price",
-        increasing_line_color="#22c55e",
-        decreasing_line_color="#ef4444",
-    ),
-    row=1,
-    col=1,
-)
+    if config["show_ma"]:
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA20"], mode="lines", name="20 MA", line=dict(width=1.6)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA50"], mode="lines", name="50 MA", line=dict(width=1.6)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA200"], mode="lines", name="200 MA", line=dict(width=1.8)), row=1, col=1)
 
-if config["show_ma"]:
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA20"], mode="lines", name="20 MA", line=dict(width=1.6)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA50"], mode="lines", name="50 MA", line=dict(width=1.6)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA200"], mode="lines", name="200 MA", line=dict(width=1.8)), row=1, col=1)
+    volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
+    fig.add_trace(
+        go.Bar(
+            x=chart_df.index,
+            y=chart_df["Volume"],
+            marker_color=volume_colors,
+            name="Volume",
+            opacity=0.55,
+        ),
+        row=2,
+        col=1,
+    )
 
-volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
-fig.add_trace(
-    go.Bar(
-        x=chart_df.index,
-        y=chart_df["Volume"],
-        marker_color=volume_colors,
-        name="Volume",
-        opacity=0.55,
-    ),
-    row=2,
-    col=1,
-)
+    fig.update_layout(
+        title=f"{selected_stock} • {selected_period} Chart",
+        template="plotly_dark",
+        height=740,
+        paper_bgcolor="#0b1220",
+        plot_bgcolor="#0b1220",
+        margin=dict(l=20, r=20, t=55, b=25),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        xaxis_rangeslider_visible=False,
+    )
 
-fig.update_layout(
-    title=f"{selected_stock} • {selected_period} Chart",
-    template="plotly_dark",
-    height=760,
-    paper_bgcolor="#071f4f",
-    plot_bgcolor="#071f4f",
-    margin=dict(l=20, r=20, t=55, b=25),
-    hovermode="x unified",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    xaxis_rangeslider_visible=False,
-)
+    fig.update_xaxes(showgrid=True, gridcolor="#1f2937")
+    fig.update_yaxes(showgrid=True, gridcolor="#1f2937")
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
 
-fig.update_xaxes(showgrid=True, gridcolor="#1e3a8a")
-fig.update_yaxes(showgrid=True, gridcolor="#1e3a8a")
-fig.update_yaxes(title_text="Price", row=1, col=1)
-fig.update_yaxes(title_text="Volume", row=2, col=1)
+    st.plotly_chart(fig, use_container_width=True)
+    chart_rendered = True
 
-st.plotly_chart(fig, use_container_width=True)
+st.divider()
+st.subheader("Data connection check")
+
+with st.expander("Show diagnostics", expanded=True):
+    st.write(f"App version: `{APP_VERSION}`")
+    st.write(f"Ticker: `{selected_stock}`")
+    st.write(f"Selected timeframe: `{selected_period}`")
+    st.write(f"yfinance period: `{config['period']}`")
+    st.write(f"yfinance interval: `{config['interval']}`")
+    st.write(f"Data status: `{data_status}`")
+    st.write(f"Rows returned: `{len(df)}`")
+    st.write(f"Columns returned: `{list(df.columns) if not df.empty else []}`")
+    st.write(f"Chart rendered: `{chart_rendered}`")
+    if not df.empty:
+        st.dataframe(df.tail(10), use_container_width=True)
