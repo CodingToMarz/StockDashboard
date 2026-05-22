@@ -10,25 +10,18 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.4-container-bubbles-sidebar"
+APP_VERSION = "v0.3.5-sidebar-restore"
 MAX_BUBBLES = 4
-
-# Future bubble roadmap reminder:
-# - Technical Analysis
-# - Company Fundamentals
-# - News
-# - Sector News
-# - Earnings / Cash Flow
-# - AI Summary
-# Future menu actions:
-# - Compare against another ticker
-# - Open related news
-# - Open technical analysis
-# - Open fundamentals
-
-st.set_page_config(page_title="Stock Dashboard", layout="wide", initial_sidebar_state="expanded")
-
 PROFILE_PATH = Path("data/profiles.json")
+
+# Roadmap reminder: Technical Analysis, Fundamentals, News, Sector News,
+# Earnings/Cash Flow, AI Summary, Compare ticker, Related news, Open analysis.
+
+st.set_page_config(
+    page_title="Stock Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 PERIOD_CONFIG = {
     "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
@@ -39,197 +32,85 @@ PERIOD_CONFIG = {
     "5Y": {"period": "5y", "interval": "1wk", "allow_ma": True, "rangebreaks": []},
     "MAX": {"period": "max", "interval": "1mo", "allow_ma": True, "rangebreaks": []},
 }
-
 BUBBLE_TYPES = ["Price Chart"]
 
 st.markdown(
     """
     <style>
-    /* Keep Streamlit header/sidebar toggle available, but make it blend in. */
-    header[data-testid="stHeader"] {
-        background: rgba(11,18,32,0.72) !important;
-        backdrop-filter: blur(10px);
-        height: 2.25rem !important;
-    }
-    div[data-testid="stToolbar"], div[data-testid="stDecoration"], #MainMenu, footer {
-        visibility: hidden !important;
-    }
     .stApp {
-        background: radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.16), transparent 32%), #0b1220;
+        background: radial-gradient(circle at 20% 0%, rgba(37,99,235,.16), transparent 32%), #0b1220;
         color: #f8fafc;
     }
+    header[data-testid="stHeader"] {
+        background: rgba(11,18,32,.85) !important;
+        backdrop-filter: blur(8px);
+    }
     section[data-testid="stSidebar"] {
-        background-color: #0f172a;
+        background: #0f172a;
         border-right: 1px solid #2563eb;
     }
-    .block-container {
-        padding-top: 2.0rem;
-        padding-bottom: 2.5rem;
-        max-width: 1720px;
-    }
-    h1, h2, h3, h4, p, label, span, div { color: #f8fafc; }
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] div { color: #dbeafe !important; }
+    .block-container { padding-top: 2.4rem; max-width: 1720px; }
+    h1,h2,h3,h4,p,label,span,div { color: #f8fafc; }
+    section[data-testid="stSidebar"] * { color: #dbeafe !important; }
 
-    /* Real Streamlit container bubbles. */
+    /* Glass bubble containers. Uses Streamlit's real bordered containers. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background:
-            linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.015) 38%, rgba(59,130,246,0.08)),
-            radial-gradient(circle at 18% 0%, rgba(147,197,253,0.22), transparent 34%),
-            linear-gradient(180deg, rgba(17, 24, 39, 0.94), rgba(15, 23, 42, 0.97)) !important;
-        border: 1px solid rgba(147, 197, 253, 0.34) !important;
+            linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.015) 38%, rgba(59,130,246,.08)),
+            radial-gradient(circle at 18% 0%, rgba(147,197,253,.22), transparent 34%),
+            linear-gradient(180deg, rgba(17,24,39,.94), rgba(15,23,42,.97)) !important;
+        border: 1px solid rgba(147,197,253,.34) !important;
         border-radius: 26px !important;
-        box-shadow:
-            0 22px 42px rgba(0,0,0,0.34),
-            0 0 28px rgba(37, 99, 235, 0.16),
-            inset 0 1px 0 rgba(255,255,255,0.12),
-            inset 0 -18px 32px rgba(15, 23, 42, 0.42) !important;
+        box-shadow: 0 22px 42px rgba(0,0,0,.34), 0 0 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.12) !important;
         padding: 18px 20px 14px 20px !important;
         margin-bottom: 22px !important;
-        backdrop-filter: blur(12px);
     }
     div[data-testid="stVerticalBlockBorderWrapper"]::before {
-        content: "";
-        display: block;
-        height: 1px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.32), transparent);
+        content: ""; display: block; height: 1px; border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.32), transparent);
         margin-bottom: 10px;
     }
 
-    /* Control contrast standard. */
-    button, button *, .stButton button, .stButton button *, [data-testid^="baseButton"], [data-testid^="baseButton"] *, button[kind], button[kind] * {
-        color: #020617 !important;
-        -webkit-text-fill-color: #020617 !important;
-        fill: #020617 !important;
-        opacity: 1 !important;
-        text-shadow: none !important;
-        white-space: nowrap !important;
-        overflow-wrap: normal !important;
-        word-break: normal !important;
+    /* High contrast controls. */
+    button, button *, .stButton button, .stButton button *, [data-testid^="baseButton"], [data-testid^="baseButton"] * {
+        color: #020617 !important; -webkit-text-fill-color: #020617 !important;
+        fill: #020617 !important; opacity: 1 !important; white-space: nowrap !important;
     }
-    button, .stButton button, [data-testid^="baseButton"], button[kind] {
-        background-color: #ffffff !important;
-        border: 1px solid #60a5fa !important;
-        border-radius: 10px !important;
-        font-weight: 850 !important;
-        box-shadow: none !important;
-        min-height: 38px !important;
-        padding-left: 0.72rem !important;
-        padding-right: 0.72rem !important;
+    button, .stButton button, [data-testid^="baseButton"] {
+        background: #ffffff !important; border: 1px solid #60a5fa !important;
+        border-radius: 10px !important; font-weight: 850 !important; min-height: 38px !important;
     }
-    button:hover, .stButton button:hover, [data-testid^="baseButton"]:hover, button[kind]:hover {
-        background-color: #dbeafe !important;
-        border-color: #2563eb !important;
-    }
-    button:disabled, button:disabled *, .stButton button:disabled, .stButton button:disabled *, [disabled], [disabled] *, [aria-disabled="true"], [aria-disabled="true"] * {
-        background-color: #e2e8f0 !important;
-        color: #334155 !important;
-        -webkit-text-fill-color: #334155 !important;
-        border-color: #94a3b8 !important;
-        opacity: 1 !important;
+    button:hover, .stButton button:hover { background: #dbeafe !important; border-color: #2563eb !important; }
+    button:disabled, button:disabled *, [disabled], [disabled] * {
+        background: #e2e8f0 !important; color: #334155 !important; -webkit-text-fill-color: #334155 !important; opacity: 1 !important;
     }
 
     input, textarea, input *, textarea * {
-        color: #020617 !important;
-        -webkit-text-fill-color: #020617 !important;
-        caret-color: #020617 !important;
+        color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important;
     }
-    input::placeholder, textarea::placeholder {
-        color: #475569 !important;
-        -webkit-text-fill-color: #475569 !important;
-        opacity: 1 !important;
+    input::placeholder, textarea::placeholder { color: #475569 !important; opacity: 1 !important; }
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > div {
+        background: #ffffff !important; color: #020617 !important; border: 1px solid #cbd5e1 !important;
     }
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="textarea"] > div {
-        background-color: #ffffff !important;
-        color: #020617 !important;
-        border: 1px solid #cbd5e1 !important;
+    div[data-baseweb="select"], div[data-baseweb="select"] *, div[data-baseweb="input"], div[data-baseweb="input"] *, div[data-baseweb="textarea"], div[data-baseweb="textarea"] * {
+        color: #020617 !important; fill: #020617 !important; -webkit-text-fill-color: #020617 !important;
     }
-    div[data-baseweb="select"], div[data-baseweb="select"] *,
-    div[data-baseweb="input"], div[data-baseweb="input"] *,
-    div[data-baseweb="textarea"], div[data-baseweb="textarea"] * {
-        color: #020617 !important;
-        fill: #020617 !important;
-        -webkit-text-fill-color: #020617 !important;
+    div[data-baseweb="popover"], div[data-baseweb="popover"] *, div[data-baseweb="menu"], div[data-baseweb="menu"] *, ul[role="listbox"], ul[role="listbox"] *, div[role="option"], div[role="option"] *, li[role="option"], li[role="option"] * {
+        background: #ffffff !important; color: #020617 !important; -webkit-text-fill-color: #020617 !important; opacity: 1 !important;
     }
-    div[data-baseweb="popover"], div[data-baseweb="popover"] *,
-    div[data-baseweb="menu"], div[data-baseweb="menu"] *,
-    div[data-baseweb="select-dropdown"], div[data-baseweb="select-dropdown"] *,
-    ul[role="listbox"], ul[role="listbox"] *,
-    div[role="listbox"], div[role="listbox"] *,
-    li[role="option"], li[role="option"] *,
-    div[role="option"], div[role="option"] * {
-        background-color: #ffffff !important;
-        color: #020617 !important;
-        fill: #020617 !important;
-        -webkit-text-fill-color: #020617 !important;
-        opacity: 1 !important;
-    }
-    li[role="option"]:hover,
-    div[role="option"]:hover,
-    li[aria-selected="true"],
-    div[aria-selected="true"] { background-color: #dbeafe !important; }
+    div[role="option"]:hover, li[role="option"]:hover { background: #dbeafe !important; }
 
-    div[data-testid="stExpander"] {
-        background-color: #111827 !important;
-        border: 1px solid #334155 !important;
-        border-radius: 14px !important;
+    div[data-testid="stExpander"] { background: #111827 !important; border: 1px solid #334155 !important; border-radius: 14px !important; }
+    div[data-testid="stExpander"] summary, div[data-testid="stExpander"] summary *, div[data-testid="stExpander"] details, div[data-testid="stExpander"] p, div[data-testid="stExpander"] span {
+        background: #111827 !important; color: #f8fafc !important; fill: #f8fafc !important;
     }
-    div[data-testid="stExpander"] details,
-    div[data-testid="stExpander"] summary {
-        background-color: #111827 !important;
-        color: #f8fafc !important;
-    }
-    div[data-testid="stExpander"] summary p,
-    div[data-testid="stExpander"] summary span,
-    div[data-testid="stExpander"] summary svg,
-    div[data-testid="stExpander"] div,
-    div[data-testid="stExpander"] p,
-    div[data-testid="stExpander"] span {
-        color: #f8fafc !important;
-        fill: #f8fafc !important;
-    }
-
-    .bubble-title {
-        font-size: 1.05rem;
-        font-weight: 900;
-        color: #f8fafc !important;
-        letter-spacing: 0.01em;
-        margin-bottom: 4px;
-    }
-    .bubble-subtitle {
-        font-size: 0.78rem;
-        color: #93c5fd !important;
-        margin-bottom: 10px;
-    }
-    .bubble-footer {
-        font-size: 0.75rem;
-        color: #94a3b8 !important;
-        border-top: 1px solid rgba(148,163,184,0.22);
-        margin-top: 8px;
-        padding-top: 8px;
-    }
-    div[data-testid="stMetric"] {
-        background-color: rgba(15,23,42,0.92);
-        border: 1px solid rgba(147,197,253,0.28);
-        border-radius: 16px;
-        padding: 10px;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-    }
-    div[data-testid="stMetricLabel"] p,
+    .bubble-title { font-size: 1.05rem; font-weight: 900; color: #f8fafc !important; margin-bottom: 4px; }
+    .bubble-subtitle { font-size: .78rem; color: #93c5fd !important; margin-bottom: 10px; }
+    .bubble-footer { font-size: .75rem; color: #94a3b8 !important; border-top: 1px solid rgba(148,163,184,.22); margin-top: 8px; padding-top: 8px; }
+    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.28); border-radius: 16px; padding: 10px; }
+    div[data-testid="stMetricLabel"] p { color: #93c5fd !important; font-weight: 700; }
     div[data-testid="stMetricValue"] { color: #f8fafc !important; }
-    div[data-testid="stMetricLabel"] p {
-        color: #93c5fd !important;
-        font-weight: 700;
-    }
-    .stRadio label, .stSelectbox label, .stTextInput label, .stCheckbox label {
-        color: #bfdbfe !important;
-        font-weight: 700;
-    }
+    .stRadio label, .stSelectbox label, .stTextInput label, .stCheckbox label { color: #bfdbfe !important; font-weight: 700; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -239,8 +120,8 @@ st.markdown(
 def load_profiles() -> dict:
     if not PROFILE_PATH.exists():
         PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        starter_profiles = {"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}
-        PROFILE_PATH.write_text(json.dumps(starter_profiles, indent=2))
+        starter = {"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}
+        PROFILE_PATH.write_text(json.dumps(starter, indent=2))
     return json.loads(PROFILE_PATH.read_text())
 
 
@@ -259,7 +140,7 @@ def default_bubble(ticker: str = "NVDA") -> dict:
     return {"id": str(uuid.uuid4())[:8], "ticker": ticker, "timeframe": "6M", "bubble_type": "Price Chart", "show_ma": True, "show_volume": True}
 
 
-def yahoo_direct_request(ticker: str, interval: str, range_value: str):
+def yahoo_direct_request(ticker: str, interval: str, range_value: str) -> pd.DataFrame:
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
     response = requests.get(url, params={"interval": interval, "range": range_value, "includePrePost": "false"}, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
     response.raise_for_status()
@@ -279,7 +160,7 @@ def yahoo_direct_request(ticker: str, interval: str, range_value: str):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_price_data(ticker: str, period: str, interval: str):
-    connector_used = "yfinance"
+    connector = "yfinance"
     try:
         data = yf.download(tickers=ticker, period=period, interval=interval, auto_adjust=False, progress=False, threads=False)
     except Exception:
@@ -289,14 +170,14 @@ def get_price_data(ticker: str, period: str, interval: str):
             data.columns = data.columns.get_level_values(0)
         data = data.dropna(subset=["Open", "High", "Low", "Close"])
     if data.empty:
-        connector_used = "Yahoo Direct API"
+        connector = "Yahoo Direct API"
         try:
             data = yahoo_direct_request(ticker, interval, period)
         except Exception as exc:
-            return pd.DataFrame(), f"All connectors failed: {exc}", connector_used
+            return pd.DataFrame(), f"All connectors failed: {exc}", connector
     if data.empty:
-        return pd.DataFrame(), "No rows returned by either connector.", connector_used
-    return data, "OK", connector_used
+        return pd.DataFrame(), "No rows returned by either connector.", connector
+    return data, "OK", connector
 
 
 def build_price_chart(chart_df: pd.DataFrame, bubble: dict, config: dict, chart_height: int):
@@ -314,7 +195,7 @@ def build_price_chart(chart_df: pd.DataFrame, bubble: dict, config: dict, chart_
         volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
         fig.add_trace(go.Bar(x=chart_df.index, y=chart_df["Volume"], name="Volume", opacity=0.55, marker_color=volume_colors), row=2, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
-    fig.update_layout(template="plotly_dark", height=chart_height, paper_bgcolor="rgba(17,24,39,0)", plot_bgcolor="rgba(17,24,39,0.78)", font=dict(color="#e5e7eb", size=12), legend=dict(font=dict(color="#e5e7eb", size=11), orientation="h", yanchor="bottom", y=1.08, xanchor="left", x=0), xaxis_rangeslider_visible=False, margin=dict(l=18, r=18, t=40, b=18), hovermode="x unified")
+    fig.update_layout(template="plotly_dark", height=chart_height, paper_bgcolor="rgba(17,24,39,0)", plot_bgcolor="rgba(17,24,39,.78)", font=dict(color="#e5e7eb", size=12), legend=dict(font=dict(color="#e5e7eb", size=11), orientation="h", yanchor="bottom", y=1.08, xanchor="left", x=0), xaxis_rangeslider_visible=False, margin=dict(l=18, r=18, t=40, b=18), hovermode="x unified")
     fig.update_xaxes(showgrid=True, gridcolor="#334155", tickfont=dict(color="#cbd5e1", size=11), rangebreaks=config["rangebreaks"])
     fig.update_yaxes(showgrid=True, gridcolor="#334155", tickfont=dict(color="#cbd5e1", size=11))
     fig.update_yaxes(title_text="Price", row=1, col=1)
@@ -324,7 +205,6 @@ def build_price_chart(chart_df: pd.DataFrame, bubble: dict, config: dict, chart_
 def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
     bubble_id = bubble["id"]
     config = PERIOD_CONFIG[bubble["timeframe"]]
-
     with st.container(border=True):
         title_col, menu_col = st.columns([0.68, 0.32], vertical_alignment="top")
         with title_col:
@@ -363,7 +243,7 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
                         else:
                             st.warning("Keep at least one bubble.")
         with st.spinner(f"Loading {bubble['ticker']}..."):
-            df, data_status, connector_used = get_price_data(bubble["ticker"], config["period"], config["interval"])
+            df, data_status, connector = get_price_data(bubble["ticker"], config["period"], config["interval"])
         if df.empty:
             st.warning("No valid price data available for this bubble.")
         else:
@@ -373,8 +253,7 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
             metric_cols[1].metric("Last Price", f"${latest['Close']:,.2f}")
             metric_cols[2].metric("Rows", f"{len(df):,}")
             st.plotly_chart(build_price_chart(df.copy(), bubble, config, chart_height), use_container_width=True, key=f"chart_{bubble_id}", config={"displayModeBar": "hover", "displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        st.markdown(f'<div class="bubble-footer">Source: {connector_used} · Status: {data_status} · Updated: {timestamp}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="bubble-footer">Source: {connector} · Status: {data_status} · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>', unsafe_allow_html=True)
 
 
 profiles = load_profiles()
