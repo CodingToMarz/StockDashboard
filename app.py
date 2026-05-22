@@ -10,14 +10,10 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.8-dramatic-bubble-outline"
+APP_VERSION = "v0.3.9-visible-bubble-frame"
 MAX_BUBBLES = 4
 PROFILE_PATH = Path("data/profiles.json")
-
-# Roadmap reminder: Technical Analysis, Fundamentals, News, Sector News,
-# Earnings/Cash Flow, AI Summary, Compare ticker, Related news, Open analysis.
-
-st.set_page_config(page_title="Stock Dashboard", layout="wide", initial_sidebar_state="expanded")
+BUBBLE_TYPES = ["Price Chart"]
 
 PERIOD_CONFIG = {
     "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
@@ -28,172 +24,37 @@ PERIOD_CONFIG = {
     "5Y": {"period": "5y", "interval": "1wk", "allow_ma": True, "rangebreaks": []},
     "MAX": {"period": "max", "interval": "1mo", "allow_ma": True, "rangebreaks": []},
 }
-BUBBLE_TYPES = ["Price Chart"]
 
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background:
-            radial-gradient(circle at 18% 0%, rgba(59,130,246,.24), transparent 34%),
-            radial-gradient(circle at 86% 10%, rgba(125,211,252,.10), transparent 28%),
-            #0b1220;
-        color: #f8fafc;
-    }
-    header[data-testid="stHeader"] { background: rgba(11,18,32,.84) !important; backdrop-filter: blur(8px); }
+st.set_page_config(page_title="Stock Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-    /* Make the sidebar collapse/reopen affordance much more visible. */
-    header[data-testid="stHeader"] button,
-    header[data-testid="stHeader"] button *,
-    button[title*="sidebar"], button[title*="sidebar"] *,
-    button[aria-label*="sidebar"], button[aria-label*="sidebar"] * {
-        color: #f8fafc !important;
-        -webkit-text-fill-color: #f8fafc !important;
-        fill: #f8fafc !important;
-        opacity: 1 !important;
-        stroke: #f8fafc !important;
-    }
-    header[data-testid="stHeader"] button,
-    button[title*="sidebar"],
-    button[aria-label*="sidebar"] {
-        background: rgba(96,165,250,.72) !important;
-        border: 2px solid rgba(219,234,254,.88) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 0 16px rgba(96,165,250,.62), inset 0 1px 0 rgba(255,255,255,.38) !important;
-    }
-    header[data-testid="stHeader"] button:hover,
-    button[title*="sidebar"]:hover,
-    button[aria-label*="sidebar"]:hover {
-        background: rgba(147,197,253,.92) !important;
-        box-shadow: 0 0 22px rgba(147,197,253,.82), inset 0 1px 0 rgba(255,255,255,.48) !important;
-    }
+st.markdown("""
+<style>
+.stApp{background:radial-gradient(circle at 18% 0%,rgba(59,130,246,.24),transparent 34%),radial-gradient(circle at 86% 10%,rgba(125,211,252,.10),transparent 28%),#0b1220;color:#f8fafc;}
+header[data-testid="stHeader"]{background:rgba(11,18,32,.84)!important;backdrop-filter:blur(8px)}
+header[data-testid="stHeader"] button,button[title*="sidebar"],button[aria-label*="sidebar"]{background:rgba(96,165,250,.72)!important;border:2px solid rgba(219,234,254,.88)!important;border-radius:12px!important;box-shadow:0 0 16px rgba(96,165,250,.62),inset 0 1px 0 rgba(255,255,255,.38)!important;color:#f8fafc!important;fill:#f8fafc!important;opacity:1!important;}
+section[data-testid="stSidebar"]{background:#0f172a;border-right:2px solid rgba(147,197,253,.58)}
+section[data-testid="stSidebar"] *{color:#dbeafe!important}.block-container{padding-top:2.4rem;max-width:1720px}h1,h2,h3,h4,p,label,span,div{color:#f8fafc}
 
-    section[data-testid="stSidebar"] { background: #0f172a; border-right: 2px solid rgba(147,197,253,.58); }
-    .block-container { padding-top: 2.4rem; max-width: 1720px; }
-    h1,h2,h3,h4,p,label,span,div { color: #f8fafc; }
-    section[data-testid="stSidebar"] * { color: #dbeafe !important; }
+/* Visible bubble frame: target outer container and first child so the edge actually shows. */
+div[data-testid="stVerticalBlockBorderWrapper"]{border:5px solid rgba(226,232,240,.72)!important;border-radius:34px!important;padding:18px 20px 14px 20px!important;margin-bottom:30px!important;overflow:visible!important;background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.035) 38%,rgba(96,165,250,.13)),radial-gradient(circle at 14% 0%,rgba(248,250,252,.34),transparent 36%),linear-gradient(180deg,rgba(17,24,39,.96),rgba(15,23,42,.99))!important;box-shadow:0 24px 54px rgba(0,0,0,.46),0 0 0 2px rgba(255,255,255,.16),0 0 34px rgba(226,232,240,.30),0 0 70px rgba(96,165,250,.22),inset 0 2px 0 rgba(255,255,255,.42),inset 0 0 28px rgba(226,232,240,.14),inset 0 -26px 46px rgba(15,23,42,.50)!important;}
+div[data-testid="stVerticalBlockBorderWrapper"]>div,div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"]{border-radius:26px!important;box-shadow:inset 0 0 0 2px rgba(241,245,249,.34),inset 0 1px 0 rgba(255,255,255,.32)!important;background:rgba(15,23,42,.25)!important;}
+div[data-testid="stVerticalBlockBorderWrapper"]::before{content:"";display:block;height:3px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.76),rgba(191,219,254,.50),transparent);margin-bottom:10px;}
+div[data-testid="stVerticalBlockBorderWrapper"]::after{content:"";display:block;height:2px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(226,232,240,.38),rgba(96,165,250,.26),transparent);margin-top:10px;}
 
-    /* BUBBLE WINDOWS: intentionally dramatic frosted-glass contour. */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background:
-            linear-gradient(145deg, rgba(255,255,255,.18), rgba(255,255,255,.045) 33%, rgba(96,165,250,.18)),
-            radial-gradient(circle at 14% 0%, rgba(248,250,252,.42), transparent 38%),
-            radial-gradient(circle at 92% 12%, rgba(186,230,253,.24), transparent 32%),
-            linear-gradient(180deg, rgba(17,24,39,.955), rgba(15,23,42,.99)) !important;
-        border: 9px solid rgba(226,232,240,.78) !important;
-        border-radius: 34px !important;
-        outline: 2px solid rgba(255,255,255,.26) !important;
-        outline-offset: -8px !important;
-        box-shadow:
-            0 32px 68px rgba(0,0,0,.52),
-            0 0 0 2px rgba(255,255,255,.16),
-            0 0 46px rgba(226,232,240,.36),
-            0 0 92px rgba(96,165,250,.26),
-            inset 0 2px 0 rgba(255,255,255,.46),
-            inset 0 0 34px rgba(226,232,240,.18),
-            inset 0 -34px 56px rgba(15,23,42,.54) !important;
-        padding: 20px 22px 16px 22px !important;
-        margin-bottom: 32px !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]::before {
-        content: ""; display: block; height: 4px; border-radius: 999px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), rgba(191,219,254,.58), transparent);
-        filter: blur(.2px);
-        margin-bottom: 12px;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]::after {
-        content: ""; display: block; height: 2px; border-radius: 999px;
-        background: linear-gradient(90deg, rgba(226,232,240,.0), rgba(226,232,240,.46), rgba(96,165,250,.34), rgba(226,232,240,.0));
-        margin-top: 10px;
-    }
-
-    /* BUTTONS ONLY: keep readable text, avoid leaking into checkboxes/code blocks. */
-    div[data-testid="stButton"] button,
-    div[data-testid="stButton"] button * {
-        color: #020617 !important;
-        -webkit-text-fill-color: #020617 !important;
-        background-image: none !important;
-        text-shadow: none !important;
-        opacity: 1 !important;
-        white-space: nowrap !important;
-    }
-    div[data-testid="stButton"] button {
-        background: #ffffff !important;
-        border: 1px solid #60a5fa !important;
-        border-radius: 10px !important;
-        font-weight: 850 !important;
-        min-height: 38px !important;
-    }
-    div[data-testid="stButton"] button:hover { background: #dbeafe !important; border-color: #2563eb !important; }
-    div[data-testid="stButton"] button:disabled,
-    div[data-testid="stButton"] button:disabled * {
-        background: #e2e8f0 !important;
-        color: #334155 !important;
-        -webkit-text-fill-color: #334155 !important;
-        opacity: 1 !important;
-    }
-
-    /* CHECKBOXES: visible selected state. */
-    div[data-testid="stCheckbox"] label,
-    div[data-testid="stCheckbox"] label * { color: #bfdbfe !important; font-weight: 700 !important; }
-    div[data-testid="stCheckbox"] input[type="checkbox"] { accent-color: #60a5fa !important; }
-    div[data-testid="stCheckbox"] [data-baseweb="checkbox"] > div:first-child {
-        border: 2px solid #93c5fd !important;
-        background: #0f172a !important;
-        box-shadow: 0 0 10px rgba(147,197,253,.22) !important;
-    }
-    div[data-testid="stCheckbox"] [aria-checked="true"] > div:first-child,
-    div[data-testid="stCheckbox"] [data-checked="true"] > div:first-child {
-        background: #60a5fa !important;
-        border-color: #dbeafe !important;
-        box-shadow: 0 0 0 2px rgba(96,165,250,.28), 0 0 16px rgba(147,197,253,.42) !important;
-    }
-    div[data-testid="stCheckbox"] svg { color: #020617 !important; fill: #020617 !important; stroke: #020617 !important; }
-
-    /* Inputs and dropdowns. */
-    input, textarea, input *, textarea * { color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important; }
-    input::placeholder, textarea::placeholder { color: #475569 !important; opacity: 1 !important; }
-    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > div {
-        background: #ffffff !important; color: #020617 !important; border: 1px solid #cbd5e1 !important;
-    }
-    div[data-baseweb="select"], div[data-baseweb="select"] *, div[data-baseweb="input"], div[data-baseweb="input"] *, div[data-baseweb="textarea"], div[data-baseweb="textarea"] * {
-        color: #020617 !important; fill: #020617 !important; -webkit-text-fill-color: #020617 !important;
-    }
-    div[data-baseweb="popover"], div[data-baseweb="popover"] *, div[data-baseweb="menu"], div[data-baseweb="menu"] *, ul[role="listbox"], ul[role="listbox"] *, div[role="option"], div[role="option"] *, li[role="option"], li[role="option"] * {
-        background: #ffffff !important; color: #020617 !important; -webkit-text-fill-color: #020617 !important; opacity: 1 !important;
-    }
-    div[role="option"]:hover, li[role="option"]:hover { background: #dbeafe !important; }
-
-    /* Expander and diagnostics: no black highlight leakage. */
-    div[data-testid="stExpander"] { background: rgba(17,24,39,.96) !important; border: 1px solid rgba(147,197,253,.36) !important; border-radius: 14px !important; }
-    div[data-testid="stExpander"] summary, div[data-testid="stExpander"] summary *, div[data-testid="stExpander"] details, div[data-testid="stExpander"] p, div[data-testid="stExpander"] span {
-        background: transparent !important; color: #f8fafc !important; fill: #f8fafc !important;
-    }
-    code, pre, code *, pre * {
-        background: #0f172a !important;
-        color: #86efac !important;
-        -webkit-text-fill-color: #86efac !important;
-        text-shadow: none !important;
-    }
-
-    .bubble-title { font-size: 1.05rem; font-weight: 900; color: #f8fafc !important; margin-bottom: 4px; }
-    .bubble-subtitle { font-size: .78rem; color: #93c5fd !important; margin-bottom: 10px; }
-    .bubble-footer { font-size: .75rem; color: #bfdbfe !important; border-top: 1px solid rgba(191,219,254,.34); margin-top: 8px; padding-top: 8px; }
-    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.45); border-radius: 16px; padding: 10px; }
-    div[data-testid="stMetricLabel"] p { color: #93c5fd !important; font-weight: 700; }
-    div[data-testid="stMetricValue"] { color: #f8fafc !important; }
-    .stRadio label, .stSelectbox label, .stTextInput label { color: #bfdbfe !important; font-weight: 700; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+/* High contrast controls. */
+div[data-testid="stButton"] button,div[data-testid="stButton"] button *{color:#020617!important;-webkit-text-fill-color:#020617!important;background-image:none!important;text-shadow:none!important;opacity:1!important;white-space:nowrap!important}div[data-testid="stButton"] button{background:#fff!important;border:1px solid #60a5fa!important;border-radius:10px!important;font-weight:850!important;min-height:38px!important}div[data-testid="stButton"] button:hover{background:#dbeafe!important;border-color:#2563eb!important}div[data-testid="stButton"] button:disabled,div[data-testid="stButton"] button:disabled *{background:#e2e8f0!important;color:#334155!important;-webkit-text-fill-color:#334155!important;opacity:1!important}
+input,textarea,input *,textarea *{color:#020617!important;-webkit-text-fill-color:#020617!important;caret-color:#020617!important}input::placeholder,textarea::placeholder{color:#475569!important;opacity:1!important}div[data-baseweb="select"]>div,div[data-baseweb="input"]>div,div[data-baseweb="textarea"]>div{background:#fff!important;color:#020617!important;border:1px solid #cbd5e1!important}div[data-baseweb="select"],div[data-baseweb="select"] *,div[data-baseweb="input"],div[data-baseweb="input"] *,div[data-baseweb="textarea"],div[data-baseweb="textarea"] *{color:#020617!important;fill:#020617!important;-webkit-text-fill-color:#020617!important}div[data-baseweb="popover"],div[data-baseweb="popover"] *,div[data-baseweb="menu"],div[data-baseweb="menu"] *,ul[role="listbox"],ul[role="listbox"] *,div[role="option"],div[role="option"] *,li[role="option"],li[role="option"] *{background:#fff!important;color:#020617!important;-webkit-text-fill-color:#020617!important;opacity:1!important}div[role="option"]:hover,li[role="option"]:hover{background:#dbeafe!important}
+div[data-testid="stCheckbox"] label,div[data-testid="stCheckbox"] label *{color:#bfdbfe!important;font-weight:700!important}div[data-testid="stCheckbox"] input[type="checkbox"]{accent-color:#60a5fa!important}div[data-testid="stCheckbox"] [data-baseweb="checkbox"]>div:first-child{border:2px solid #93c5fd!important;background:#0f172a!important;box-shadow:0 0 10px rgba(147,197,253,.22)!important}div[data-testid="stCheckbox"] [aria-checked="true"]>div:first-child,div[data-testid="stCheckbox"] [data-checked="true"]>div:first-child{background:#60a5fa!important;border-color:#dbeafe!important;box-shadow:0 0 0 2px rgba(96,165,250,.28),0 0 16px rgba(147,197,253,.42)!important}div[data-testid="stCheckbox"] svg{color:#020617!important;fill:#020617!important;stroke:#020617!important}
+div[data-testid="stExpander"]{background:rgba(17,24,39,.96)!important;border:1px solid rgba(147,197,253,.36)!important;border-radius:14px!important}div[data-testid="stExpander"] summary,div[data-testid="stExpander"] summary *,div[data-testid="stExpander"] details,div[data-testid="stExpander"] p,div[data-testid="stExpander"] span{background:transparent!important;color:#f8fafc!important;fill:#f8fafc!important}code,pre,code *,pre *{background:#0f172a!important;color:#86efac!important;-webkit-text-fill-color:#86efac!important;text-shadow:none!important}
+.bubble-title{font-size:1.05rem;font-weight:900;color:#f8fafc!important;margin-bottom:4px}.bubble-subtitle{font-size:.78rem;color:#93c5fd!important;margin-bottom:10px}.bubble-footer{font-size:.75rem;color:#bfdbfe!important;border-top:1px solid rgba(191,219,254,.34);margin-top:8px;padding-top:8px}div[data-testid="stMetric"]{background:rgba(15,23,42,.92);border:1px solid rgba(147,197,253,.45);border-radius:16px;padding:10px}div[data-testid="stMetricLabel"] p{color:#93c5fd!important;font-weight:700}div[data-testid="stMetricValue"]{color:#f8fafc!important}.stRadio label,.stSelectbox label,.stTextInput label{color:#bfdbfe!important;font-weight:700}
+</style>
+""", unsafe_allow_html=True)
 
 
 def load_profiles() -> dict:
     if not PROFILE_PATH.exists():
         PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        starter = {"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}
-        PROFILE_PATH.write_text(json.dumps(starter, indent=2))
+        PROFILE_PATH.write_text(json.dumps({"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}, indent=2))
     return json.loads(PROFILE_PATH.read_text())
 
 
@@ -202,10 +63,7 @@ def save_profiles(profiles: dict) -> None:
 
 
 def get_all_tickers(profiles: dict) -> list[str]:
-    tickers = []
-    for items in profiles.values():
-        tickers.extend(items)
-    return sorted(set(tickers)) or ["NVDA"]
+    return sorted({ticker for group in profiles.values() for ticker in group}) or ["NVDA"]
 
 
 def default_bubble(ticker: str = "NVDA") -> dict:
@@ -252,20 +110,16 @@ def get_price_data(ticker: str, period: str, interval: str):
     return data, "OK", connector
 
 
-def build_price_chart(chart_df: pd.DataFrame, bubble: dict, config: dict, chart_height: int):
+def build_price_chart(df: pd.DataFrame, bubble: dict, config: dict, chart_height: int):
     rows = 2 if bubble["show_volume"] else 1
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.74, 0.26] if rows == 2 else [1])
-    fig.add_trace(go.Candlestick(x=chart_df.index, open=chart_df["Open"], high=chart_df["High"], low=chart_df["Low"], close=chart_df["Close"], name="Price", increasing_line_color="#22c55e", decreasing_line_color="#ef4444"), row=1, col=1)
+    fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"], name="Price", increasing_line_color="#22c55e", decreasing_line_color="#ef4444"), row=1, col=1)
     if bubble["show_ma"] and config["allow_ma"]:
-        chart_df["MA20"] = chart_df["Close"].rolling(window=20, min_periods=1).mean()
-        chart_df["MA50"] = chart_df["Close"].rolling(window=50, min_periods=1).mean()
-        chart_df["MA200"] = chart_df["Close"].rolling(window=200, min_periods=1).mean()
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA20"], mode="lines", name="20 MA", line=dict(color="#f97316", width=1.8)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA50"], mode="lines", name="50 MA", line=dict(color="#14b8a6", width=1.8)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["MA200"], mode="lines", name="200 MA", line=dict(color="#8b5cf6", width=1.8)), row=1, col=1)
+        for label, window, color in [("20 MA", 20, "#f97316"), ("50 MA", 50, "#14b8a6"), ("200 MA", 200, "#8b5cf6")]:
+            fig.add_trace(go.Scatter(x=df.index, y=df["Close"].rolling(window=window, min_periods=1).mean(), mode="lines", name=label, line=dict(color=color, width=1.8)), row=1, col=1)
     if bubble["show_volume"]:
-        volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
-        fig.add_trace(go.Bar(x=chart_df.index, y=chart_df["Volume"], name="Volume", opacity=0.55, marker_color=volume_colors), row=2, col=1)
+        colors = ["#22c55e" if c >= o else "#ef4444" for c, o in zip(df["Close"], df["Open"])]
+        fig.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume", opacity=0.55, marker_color=colors), row=2, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
     fig.update_layout(template="plotly_dark", height=chart_height, paper_bgcolor="rgba(17,24,39,0)", plot_bgcolor="rgba(17,24,39,.78)", font=dict(color="#e5e7eb", size=12), legend=dict(font=dict(color="#e5e7eb", size=11), orientation="h", yanchor="bottom", y=1.08, xanchor="left", x=0), xaxis_rangeslider_visible=False, margin=dict(l=18, r=18, t=40, b=18), hovermode="x unified")
     fig.update_xaxes(showgrid=True, gridcolor="#334155", tickfont=dict(color="#cbd5e1", size=11), rangebreaks=config["rangebreaks"])
@@ -291,46 +145,36 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
                 show_ma = st.checkbox("Moving averages", value=bubble["show_ma"], key=f"ma_{bubble_id}")
                 show_volume = st.checkbox("Volume", value=bubble["show_volume"], key=f"volume_{bubble_id}")
                 if st.button("Apply", key=f"apply_{bubble_id}", use_container_width=True):
-                    bubble["ticker"] = custom_ticker.upper().strip() or selected_ticker
-                    bubble["timeframe"] = selected_timeframe
-                    bubble["bubble_type"] = selected_type
-                    bubble["show_ma"] = show_ma
-                    bubble["show_volume"] = show_volume
+                    bubble.update({"ticker": custom_ticker.upper().strip() or selected_ticker, "timeframe": selected_timeframe, "bubble_type": selected_type, "show_ma": show_ma, "show_volume": show_volume})
                     st.rerun()
-                action_col_1, action_col_2 = st.columns([1.25, 1.0])
-                with action_col_1:
+                c1, c2 = st.columns([1.25, 1.0])
+                with c1:
                     if st.button("Duplicate", key=f"duplicate_{bubble_id}", use_container_width=True):
                         if len(st.session_state.bubbles) < MAX_BUBBLES:
-                            new_bubble = bubble.copy()
-                            new_bubble["id"] = str(uuid.uuid4())[:8]
-                            st.session_state.bubbles.append(new_bubble)
-                            st.rerun()
+                            new_bubble = bubble.copy(); new_bubble["id"] = str(uuid.uuid4())[:8]
+                            st.session_state.bubbles.append(new_bubble); st.rerun()
                         else:
                             st.warning("Maximum of 4 bubbles reached.")
-                with action_col_2:
+                with c2:
                     if st.button("Remove", key=f"remove_{bubble_id}", use_container_width=True):
                         if len(st.session_state.bubbles) > 1:
-                            st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]
-                            st.rerun()
+                            st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]; st.rerun()
                         else:
                             st.warning("Keep at least one bubble.")
         with st.spinner(f"Loading {bubble['ticker']}..."):
-            df, data_status, connector = get_price_data(bubble["ticker"], config["period"], config["interval"])
+            df, status, connector = get_price_data(bubble["ticker"], config["period"], config["interval"])
         if df.empty:
             st.warning("No valid price data available for this bubble.")
         else:
             latest = df.iloc[-1]
-            metric_cols = st.columns(3)
-            metric_cols[0].metric("Ticker", bubble["ticker"])
-            metric_cols[1].metric("Last Price", f"${latest['Close']:,.2f}")
-            metric_cols[2].metric("Rows", f"{len(df):,}")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Ticker", bubble["ticker"]); m2.metric("Last Price", f"${latest['Close']:,.2f}"); m3.metric("Rows", f"{len(df):,}")
             st.plotly_chart(build_price_chart(df.copy(), bubble, config, chart_height), use_container_width=True, key=f"chart_{bubble_id}", config={"displayModeBar": "hover", "displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
-        st.markdown(f'<div class="bubble-footer">Source: {connector} · Status: {data_status} · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="bubble-footer">Source: {connector} · Status: {status} · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>', unsafe_allow_html=True)
 
 
 profiles = load_profiles()
 all_tickers = get_all_tickers(profiles)
-
 if "bubbles" not in st.session_state:
     st.session_state.bubbles = [default_bubble(all_tickers[0])]
 
@@ -338,56 +182,39 @@ st.sidebar.title("Stock Profiles")
 st.sidebar.caption(f"Version: {APP_VERSION}")
 selected_profile = st.sidebar.selectbox("Select Profile", list(profiles.keys()))
 new_ticker = st.sidebar.text_input("Add Ticker")
-
 if st.sidebar.button("Add To Profile"):
     ticker = new_ticker.upper().strip()
     if ticker and ticker not in profiles[selected_profile]:
-        profiles[selected_profile].append(ticker)
-        save_profiles(profiles)
-        st.sidebar.success(f"Added {ticker}")
-        st.rerun()
-
+        profiles[selected_profile].append(ticker); save_profiles(profiles); st.sidebar.success(f"Added {ticker}"); st.rerun()
 if st.sidebar.button("+ Add Bubble"):
     if len(st.session_state.bubbles) < MAX_BUBBLES:
-        default_ticker = profiles[selected_profile][0] if profiles[selected_profile] else all_tickers[0]
-        st.session_state.bubbles.append(default_bubble(default_ticker))
-        st.rerun()
+        st.session_state.bubbles.append(default_bubble(profiles[selected_profile][0] if profiles[selected_profile] else all_tickers[0])); st.rerun()
     else:
         st.sidebar.warning("Maximum of 4 bubbles reached.")
-
 st.sidebar.caption(f"Active bubbles: {len(st.session_state.bubbles)} / {MAX_BUBBLES}")
 
 st.title("Stock Dashboard")
 st.caption("Bubble-based dashboard layout · each bubble is an independent chart instance")
 
-bubble_count = len(st.session_state.bubbles)
-chart_height = 520 if bubble_count <= 2 else 430
-
-if bubble_count == 1:
-    render_bubble(st.session_state.bubbles[0], all_tickers, chart_height)
-elif bubble_count == 2:
+count = len(st.session_state.bubbles)
+height = 520 if count <= 2 else 430
+if count == 1:
+    render_bubble(st.session_state.bubbles[0], all_tickers, height)
+elif count == 2:
     cols = st.columns(2)
-    for index, bubble in enumerate(st.session_state.bubbles):
-        with cols[index]:
-            render_bubble(bubble, all_tickers, chart_height)
-elif bubble_count == 3:
-    top_cols = st.columns(2)
-    with top_cols[0]:
-        render_bubble(st.session_state.bubbles[0], all_tickers, chart_height)
-    with top_cols[1]:
-        render_bubble(st.session_state.bubbles[1], all_tickers, chart_height)
-    render_bubble(st.session_state.bubbles[2], all_tickers, chart_height)
+    for i, bubble in enumerate(st.session_state.bubbles):
+        with cols[i]: render_bubble(bubble, all_tickers, height)
+elif count == 3:
+    top = st.columns(2)
+    with top[0]: render_bubble(st.session_state.bubbles[0], all_tickers, height)
+    with top[1]: render_bubble(st.session_state.bubbles[1], all_tickers, height)
+    render_bubble(st.session_state.bubbles[2], all_tickers, height)
 else:
-    top_cols = st.columns(2)
-    bottom_cols = st.columns(2)
-    with top_cols[0]:
-        render_bubble(st.session_state.bubbles[0], all_tickers, chart_height)
-    with top_cols[1]:
-        render_bubble(st.session_state.bubbles[1], all_tickers, chart_height)
-    with bottom_cols[0]:
-        render_bubble(st.session_state.bubbles[2], all_tickers, chart_height)
-    with bottom_cols[1]:
-        render_bubble(st.session_state.bubbles[3], all_tickers, chart_height)
+    top, bottom = st.columns(2), st.columns(2)
+    with top[0]: render_bubble(st.session_state.bubbles[0], all_tickers, height)
+    with top[1]: render_bubble(st.session_state.bubbles[1], all_tickers, height)
+    with bottom[0]: render_bubble(st.session_state.bubbles[2], all_tickers, height)
+    with bottom[1]: render_bubble(st.session_state.bubbles[3], all_tickers, height)
 
 st.divider()
 st.subheader("Data connection check")
