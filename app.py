@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.2-control-contrast-standard"
+APP_VERSION = "v0.3.3-glass-controls"
 MAX_BUBBLES = 4
 
 # Future bubble roadmap reminder:
@@ -26,7 +26,7 @@ MAX_BUBBLES = 4
 # - Open technical analysis
 # - Open fundamentals
 
-st.set_page_config(page_title="Stock Dashboard", layout="wide")
+st.set_page_config(page_title="Stock Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 PROFILE_PATH = Path("data/profiles.json")
 
@@ -47,7 +47,7 @@ st.markdown(
     <style>
     header[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"] { display: none !important; height: 0 !important; }
     #MainMenu, footer { visibility: hidden !important; }
-    .stApp { background: #0b1220; color: #f8fafc; }
+    .stApp { background: radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.16), transparent 32%), #0b1220; color: #f8fafc; }
     section[data-testid="stSidebar"] { background-color: #0f172a; border-right: 1px solid #2563eb; }
     .block-container { padding-top: 1.0rem; padding-bottom: 2.5rem; max-width: 1720px; }
     h1, h2, h3, h4, p, label, span, div { color: #f8fafc; }
@@ -57,30 +57,33 @@ st.markdown(
     button, button *,
     .stButton button, .stButton button *,
     [data-testid^="baseButton"], [data-testid^="baseButton"] *,
-    button[kind], button[kind] *,
-    [role="button"], [role="button"] * {
+    button[kind], button[kind] * {
         color: #020617 !important;
         -webkit-text-fill-color: #020617 !important;
         fill: #020617 !important;
         opacity: 1 !important;
         text-shadow: none !important;
+        white-space: nowrap !important;
+        overflow-wrap: normal !important;
+        word-break: normal !important;
     }
     button,
     .stButton button,
     [data-testid^="baseButton"],
-    button[kind],
-    [role="button"] {
+    button[kind] {
         background-color: #ffffff !important;
         border: 1px solid #60a5fa !important;
         border-radius: 10px !important;
         font-weight: 850 !important;
         box-shadow: none !important;
+        min-height: 38px !important;
+        padding-left: 0.72rem !important;
+        padding-right: 0.72rem !important;
     }
     button:hover,
     .stButton button:hover,
     [data-testid^="baseButton"]:hover,
-    button[kind]:hover,
-    [role="button"]:hover {
+    button[kind]:hover {
         background-color: #dbeafe !important;
         border-color: #2563eb !important;
         color: #020617 !important;
@@ -110,6 +113,7 @@ st.markdown(
         border-color: #94a3b8 !important;
         opacity: 1 !important;
     }
+    div[data-testid="stButton"] button p, div[data-testid="stButton"] button span { color: #020617 !important; -webkit-text-fill-color: #020617 !important; }
 
     /* Form fields and dropdowns */
     input, textarea, input *, textarea * { color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important; }
@@ -126,16 +130,44 @@ st.markdown(
     }
     li[role="option"]:hover, div[role="option"]:hover, li[aria-selected="true"], div[aria-selected="true"] { background-color: #dbeafe !important; color: #020617 !important; -webkit-text-fill-color: #020617 !important; }
 
-    div[data-testid="stExpander"] { background-color: #111827 !important; border: 1px solid #334155 !important; border-radius: 12px !important; }
+    div[data-testid="stExpander"] { background-color: #111827 !important; border: 1px solid #334155 !important; border-radius: 14px !important; }
     div[data-testid="stExpander"] details, div[data-testid="stExpander"] summary { background-color: #111827 !important; color: #f8fafc !important; }
     div[data-testid="stExpander"] summary p, div[data-testid="stExpander"] summary span, div[data-testid="stExpander"] summary svg { color: #f8fafc !important; fill: #f8fafc !important; }
     div[data-testid="stExpander"] div, div[data-testid="stExpander"] p, div[data-testid="stExpander"] span { color: #f8fafc !important; }
 
-    .bubble-shell { background: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.98)); border: 1px solid #334155; border-radius: 24px; box-shadow: 0 18px 36px rgba(0,0,0,0.28); padding: 16px 18px 12px 18px; margin-bottom: 18px; overflow: hidden; }
+    .bubble-shell {
+        position: relative;
+        background:
+            linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.015) 38%, rgba(59,130,246,0.08)),
+            radial-gradient(circle at 18% 0%, rgba(147,197,253,0.22), transparent 34%),
+            linear-gradient(180deg, rgba(17, 24, 39, 0.94), rgba(15, 23, 42, 0.97));
+        border: 1px solid rgba(147, 197, 253, 0.34);
+        border-radius: 26px;
+        box-shadow:
+            0 22px 42px rgba(0,0,0,0.34),
+            0 0 28px rgba(37, 99, 235, 0.16),
+            inset 0 1px 0 rgba(255,255,255,0.12),
+            inset 0 -18px 32px rgba(15, 23, 42, 0.42);
+        padding: 18px 20px 14px 20px;
+        margin-bottom: 22px;
+        overflow: visible;
+        backdrop-filter: blur(12px);
+    }
+    .bubble-shell::before {
+        content: "";
+        position: absolute;
+        top: 10px;
+        left: 18px;
+        right: 18px;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.32), transparent);
+        pointer-events: none;
+    }
     .bubble-title { font-size: 1.05rem; font-weight: 900; color: #f8fafc !important; letter-spacing: 0.01em; margin-bottom: 4px; }
     .bubble-subtitle { font-size: 0.78rem; color: #93c5fd !important; margin-bottom: 10px; }
-    .bubble-footer { font-size: 0.75rem; color: #94a3b8 !important; border-top: 1px solid #1f2937; margin-top: 8px; padding-top: 8px; }
-    div[data-testid="stMetric"] { background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 10px; }
+    .bubble-footer { font-size: 0.75rem; color: #94a3b8 !important; border-top: 1px solid rgba(148,163,184,0.22); margin-top: 8px; padding-top: 8px; }
+    div[data-testid="stMetric"] { background-color: rgba(15,23,42,0.92); border: 1px solid rgba(147,197,253,0.28); border-radius: 16px; padding: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
     div[data-testid="stMetricLabel"] p, div[data-testid="stMetricValue"] { color: #f8fafc !important; }
     div[data-testid="stMetricLabel"] p { color: #93c5fd !important; font-weight: 700; }
     .stRadio label, .stSelectbox label, .stTextInput label, .stCheckbox label { color: #bfdbfe !important; font-weight: 700; }
@@ -223,7 +255,7 @@ def build_price_chart(chart_df: pd.DataFrame, bubble: dict, config: dict, chart_
         volume_colors = ["#22c55e" if close >= open_ else "#ef4444" for close, open_ in zip(chart_df["Close"], chart_df["Open"])]
         fig.add_trace(go.Bar(x=chart_df.index, y=chart_df["Volume"], name="Volume", opacity=0.55, marker_color=volume_colors), row=2, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
-    fig.update_layout(template="plotly_dark", height=chart_height, paper_bgcolor="#111827", plot_bgcolor="#111827", font=dict(color="#e5e7eb", size=12), legend=dict(font=dict(color="#e5e7eb", size=11), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis_rangeslider_visible=False, margin=dict(l=18, r=18, t=18, b=18), hovermode="x unified")
+    fig.update_layout(template="plotly_dark", height=chart_height, paper_bgcolor="rgba(17,24,39,0)", plot_bgcolor="rgba(17,24,39,0.78)", font=dict(color="#e5e7eb", size=12), legend=dict(font=dict(color="#e5e7eb", size=11), orientation="h", yanchor="bottom", y=1.08, xanchor="left", x=0), xaxis_rangeslider_visible=False, margin=dict(l=18, r=18, t=40, b=18), hovermode="x unified")
     fig.update_xaxes(showgrid=True, gridcolor="#334155", tickfont=dict(color="#cbd5e1", size=11), rangebreaks=config["rangebreaks"])
     fig.update_yaxes(showgrid=True, gridcolor="#334155", tickfont=dict(color="#cbd5e1", size=11))
     fig.update_yaxes(title_text="Price", row=1, col=1)
@@ -246,16 +278,16 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
             selected_type = st.selectbox("Bubble type", BUBBLE_TYPES, index=0, key=f"type_{bubble_id}")
             show_ma = st.checkbox("Moving averages", value=bubble["show_ma"], key=f"ma_{bubble_id}")
             show_volume = st.checkbox("Volume", value=bubble["show_volume"], key=f"volume_{bubble_id}")
-            if st.button("Apply", key=f"apply_{bubble_id}"):
+            if st.button("Apply", key=f"apply_{bubble_id}", use_container_width=True):
                 bubble["ticker"] = custom_ticker.upper().strip() or selected_ticker
                 bubble["timeframe"] = selected_timeframe
                 bubble["bubble_type"] = selected_type
                 bubble["show_ma"] = show_ma
                 bubble["show_volume"] = show_volume
                 st.rerun()
-            action_col_1, action_col_2 = st.columns(2)
+            action_col_1, action_col_2 = st.columns([1.25, 1.0])
             with action_col_1:
-                if st.button("Duplicate", key=f"duplicate_{bubble_id}"):
+                if st.button("Duplicate", key=f"duplicate_{bubble_id}", use_container_width=True):
                     if len(st.session_state.bubbles) < MAX_BUBBLES:
                         new_bubble = bubble.copy()
                         new_bubble["id"] = str(uuid.uuid4())[:8]
@@ -264,7 +296,7 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
                     else:
                         st.warning("Maximum of 4 bubbles reached.")
             with action_col_2:
-                if st.button("Remove", key=f"remove_{bubble_id}"):
+                if st.button("Remove", key=f"remove_{bubble_id}", use_container_width=True):
                     if len(st.session_state.bubbles) > 1:
                         st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]
                         st.rerun()
@@ -280,7 +312,7 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
         metric_cols[0].metric("Ticker", bubble["ticker"])
         metric_cols[1].metric("Last Price", f"${latest['Close']:,.2f}")
         metric_cols[2].metric("Rows", f"{len(df):,}")
-        st.plotly_chart(build_price_chart(df.copy(), bubble, config, chart_height), use_container_width=True, key=f"chart_{bubble_id}")
+        st.plotly_chart(build_price_chart(df.copy(), bubble, config, chart_height), use_container_width=True, key=f"chart_{bubble_id}", config={"displayModeBar": "hover", "displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     st.markdown(f'<div class="bubble-footer">Source: {connector_used} · Status: {data_status} · Updated: {timestamp}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
