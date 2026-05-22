@@ -10,10 +10,11 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.10-simple-border-cleanup"
+APP_VERSION = "v0.3.11-active-bubble-daily-change"
 MAX_BUBBLES = 4
 PROFILE_PATH = Path("data/profiles.json")
 BUBBLE_TYPES = ["Price Chart"]
+CHANGE_MODES = ["percent", "dollars", "market_cap"]
 
 PERIOD_CONFIG = {
     "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
@@ -32,8 +33,9 @@ st.markdown("""
 .stApp{background:#0b1220;color:#f8fafc}header[data-testid="stHeader"]{background:rgba(11,18,32,.86)!important;backdrop-filter:blur(8px)}.block-container{padding-top:2.4rem;max-width:1720px}h1,h2,h3,h4,p,label,span,div{color:#f8fafc}section[data-testid="stSidebar"]{background:#0f172a;border-right:2px solid #bfdbfe}section[data-testid="stSidebar"] *{color:#dbeafe!important}
 header[data-testid="stHeader"] button,button[title*="sidebar"],button[aria-label*="sidebar"]{background:#60a5fa!important;border:2px solid #f8fafc!important;border-radius:12px!important;color:#fff!important;fill:#fff!important;box-shadow:0 0 14px rgba(96,165,250,.65)!important;opacity:1!important}
 
-/* Simple window border: remove experimental layered frame effects. */
+/* Simple, reliable bubble border. Active bubble gets stronger contrast via :has marker. */
 div[data-testid="stVerticalBlockBorderWrapper"]{border:4px solid rgba(241,245,249,.82)!important;border-radius:24px!important;background:#0f172a!important;padding:16px 18px!important;margin-bottom:24px!important;box-shadow:0 10px 28px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.18)!important;overflow:hidden!important}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(#active-bubble-marker){border:6px solid #f8fafc!important;box-shadow:0 12px 32px rgba(0,0,0,.42),0 0 0 2px rgba(96,165,250,.62),0 0 24px rgba(147,197,253,.60)!important;background:#111827!important}
 
 /* Readable controls without broad leakage. */
 div[data-testid="stButton"] button,div[data-testid="stButton"] button *{color:#020617!important;-webkit-text-fill-color:#020617!important;white-space:nowrap!important;text-shadow:none!important}div[data-testid="stButton"] button{background:#fff!important;border:1px solid #60a5fa!important;border-radius:10px!important;font-weight:800!important;min-height:38px!important}div[data-testid="stButton"] button:hover{background:#dbeafe!important;border-color:#2563eb!important}div[data-testid="stButton"] button:disabled,div[data-testid="stButton"] button:disabled *{background:#e2e8f0!important;color:#334155!important;-webkit-text-fill-color:#334155!important;opacity:1!important}
@@ -61,7 +63,34 @@ def get_all_tickers(profiles: dict) -> list[str]:
 
 
 def default_bubble(ticker: str = "NVDA") -> dict:
-    return {"id": str(uuid.uuid4())[:8], "ticker": ticker, "timeframe": "6M", "bubble_type": "Price Chart", "show_ma": True, "show_volume": True}
+    return {"id": str(uuid.uuid4())[:8], "ticker": ticker, "timeframe": "6M", "bubble_type": "Price Chart", "show_ma": True, "show_volume": True, "change_mode": "percent"}
+
+
+def cycle_change_mode(mode: str) -> str:
+    return CHANGE_MODES[(CHANGE_MODES.index(mode) + 1) % len(CHANGE_MODES)] if mode in CHANGE_MODES else "percent"
+
+
+def format_large_money(value: float | None) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    sign = "+" if value >= 0 else "-"
+    value = abs(value)
+    if value >= 1_000_000_000_000:
+        return f"{sign}${value/1_000_000_000_000:.2f}T"
+    if value >= 1_000_000_000:
+        return f"{sign}${value/1_000_000_000:.2f}B"
+    if value >= 1_000_000:
+        return f"{sign}${value/1_000_000:.2f}M"
+    return f"{sign}${value:,.0f}"
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_market_cap(ticker: str) -> float | None:
+    try:
+        fast_info = yf.Ticker(ticker).fast_info
+        return fast_info.get("market_cap") if fast_info else None
+    except Exception:
+        return None
 
 
 def yahoo_direct_request(ticker: str, interval: str, range_value: str) -> pd.DataFrame:
@@ -122,16 +151,46 @@ def build_price_chart(df: pd.DataFrame, bubble: dict, config: dict, chart_height
     return fig
 
 
+def render_change_button(bubble: dict, df: pd.DataFrame, bubble_id: str):
+    close = df["Close"].dropna()
+    if len(close) < 2:
+        label = "Daily Change: N/A"
+    else:
+        current, previous = float(close.iloc[-1]), float(close.iloc[-2])
+        dollar_change = current - previous
+        pct_change = (dollar_change / previous) * 100 if previous else 0
+        mode = bubble.get("change_mode", "percent")
+        if mode == "dollars":
+            label = f"Daily $: {dollar_change:+.2f}"
+        elif mode == "market_cap":
+            market_cap = get_market_cap(bubble["ticker"])
+            estimated_move = market_cap * (pct_change / 100) if market_cap else None
+            label = f"Mkt Cap Est: {format_large_money(estimated_move)}"
+        else:
+            label = f"Daily %: {pct_change:+.2f}%"
+    if st.button(label, key=f"change_metric_{bubble_id}", use_container_width=True):
+        bubble["change_mode"] = cycle_change_mode(bubble.get("change_mode", "percent"))
+        st.session_state.active_bubble_id = bubble_id
+        st.rerun()
+
+
 def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
     bubble_id = bubble["id"]
+    bubble.setdefault("change_mode", "percent")
     config = PERIOD_CONFIG[bubble["timeframe"]]
     with st.container(border=True):
+        if st.session_state.get("active_bubble_id") == bubble_id:
+            st.markdown('<span id="active-bubble-marker"></span>', unsafe_allow_html=True)
         title_col, menu_col = st.columns([0.68, 0.32], vertical_alignment="top")
         with title_col:
-            st.markdown(f'<div class="bubble-title">{bubble["ticker"]} • {bubble["bubble_type"]}</div>', unsafe_allow_html=True)
+            active_label = " · ACTIVE" if st.session_state.get("active_bubble_id") == bubble_id else ""
+            st.markdown(f'<div class="bubble-title">{bubble["ticker"]} • {bubble["bubble_type"]}{active_label}</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="bubble-subtitle">{bubble["timeframe"]} · independent dashboard bubble</div>', unsafe_allow_html=True)
         with menu_col:
             with st.expander("Menu", expanded=False):
+                if st.button("Set Active", key=f"active_{bubble_id}", use_container_width=True):
+                    st.session_state.active_bubble_id = bubble_id
+                    st.rerun()
                 selected_ticker = st.selectbox("Stock ticker", all_tickers, index=all_tickers.index(bubble["ticker"]) if bubble["ticker"] in all_tickers else 0, key=f"ticker_{bubble_id}")
                 custom_ticker = st.text_input("Or type ticker", value="", key=f"custom_ticker_{bubble_id}")
                 selected_timeframe = st.selectbox("Timeframe", list(PERIOD_CONFIG.keys()), index=list(PERIOD_CONFIG.keys()).index(bubble["timeframe"]), key=f"timeframe_{bubble_id}")
@@ -140,19 +199,24 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
                 show_volume = st.checkbox("Volume", value=bubble["show_volume"], key=f"volume_{bubble_id}")
                 if st.button("Apply", key=f"apply_{bubble_id}", use_container_width=True):
                     bubble.update({"ticker": custom_ticker.upper().strip() or selected_ticker, "timeframe": selected_timeframe, "bubble_type": selected_type, "show_ma": show_ma, "show_volume": show_volume})
+                    st.session_state.active_bubble_id = bubble_id
                     st.rerun()
                 c1, c2 = st.columns([1.25, 1.0])
                 with c1:
                     if st.button("Duplicate", key=f"duplicate_{bubble_id}", use_container_width=True):
                         if len(st.session_state.bubbles) < MAX_BUBBLES:
                             new_bubble = bubble.copy(); new_bubble["id"] = str(uuid.uuid4())[:8]
-                            st.session_state.bubbles.append(new_bubble); st.rerun()
+                            st.session_state.bubbles.append(new_bubble)
+                            st.session_state.active_bubble_id = new_bubble["id"]
+                            st.rerun()
                         else:
                             st.warning("Maximum of 4 bubbles reached.")
                 with c2:
                     if st.button("Remove", key=f"remove_{bubble_id}", use_container_width=True):
                         if len(st.session_state.bubbles) > 1:
-                            st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]; st.rerun()
+                            st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]
+                            st.session_state.active_bubble_id = st.session_state.bubbles[0]["id"]
+                            st.rerun()
                         else:
                             st.warning("Keep at least one bubble.")
         with st.spinner(f"Loading {bubble['ticker']}..."):
@@ -162,7 +226,10 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int):
         else:
             latest = df.iloc[-1]
             m1, m2, m3 = st.columns(3)
-            m1.metric("Ticker", bubble["ticker"]); m2.metric("Last Price", f"${latest['Close']:,.2f}"); m3.metric("Rows", f"{len(df):,}")
+            m1.metric("Ticker", bubble["ticker"])
+            m2.metric("Last Price", f"${latest['Close']:,.2f}")
+            with m3:
+                render_change_button(bubble, df, bubble_id)
             st.plotly_chart(build_price_chart(df.copy(), bubble, config, chart_height), use_container_width=True, key=f"chart_{bubble_id}", config={"displayModeBar": "hover", "displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
         st.markdown(f'<div class="bubble-footer">Source: {connector} · Status: {status} · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>', unsafe_allow_html=True)
 
@@ -171,6 +238,8 @@ profiles = load_profiles()
 all_tickers = get_all_tickers(profiles)
 if "bubbles" not in st.session_state:
     st.session_state.bubbles = [default_bubble(all_tickers[0])]
+if "active_bubble_id" not in st.session_state:
+    st.session_state.active_bubble_id = st.session_state.bubbles[0]["id"]
 
 st.sidebar.title("Stock Profiles")
 st.sidebar.caption(f"Version: {APP_VERSION}")
@@ -182,7 +251,10 @@ if st.sidebar.button("Add To Profile"):
         profiles[selected_profile].append(ticker); save_profiles(profiles); st.sidebar.success(f"Added {ticker}"); st.rerun()
 if st.sidebar.button("+ Add Bubble"):
     if len(st.session_state.bubbles) < MAX_BUBBLES:
-        st.session_state.bubbles.append(default_bubble(profiles[selected_profile][0] if profiles[selected_profile] else all_tickers[0])); st.rerun()
+        new_bubble = default_bubble(profiles[selected_profile][0] if profiles[selected_profile] else all_tickers[0])
+        st.session_state.bubbles.append(new_bubble)
+        st.session_state.active_bubble_id = new_bubble["id"]
+        st.rerun()
     else:
         st.sidebar.warning("Maximum of 4 bubbles reached.")
 st.sidebar.caption(f"Active bubbles: {len(st.session_state.bubbles)} / {MAX_BUBBLES}")
@@ -214,5 +286,6 @@ st.divider()
 st.subheader("Data connection check")
 with st.expander("Show diagnostics", expanded=False):
     st.write(f"App version: `{APP_VERSION}`")
+    st.write(f"Active bubble: `{st.session_state.active_bubble_id}`")
     st.write(f"Active bubbles: `{len(st.session_state.bubbles)}`")
     st.write(st.session_state.bubbles)
