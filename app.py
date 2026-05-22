@@ -7,6 +7,8 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
+APP_VERSION = "v0.2.1-blue-debug"
+
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
 PROFILE_PATH = Path("data/profiles.json")
@@ -25,28 +27,42 @@ st.markdown(
     """
     <style>
     .stApp {
-        background: linear-gradient(180deg, #0b0f19 0%, #111827 100%);
-        color: #e5e7eb;
+        background: #071f4f !important;
+        color: #e5e7eb !important;
     }
     section[data-testid="stSidebar"] {
-        background-color: #0f172a;
-        border-right: 1px solid #1e293b;
+        background-color: #041633 !important;
+        border-right: 2px solid #38bdf8 !important;
     }
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
     }
-    h1, h2, h3 {
-        color: #f8fafc;
+    h1, h2, h3, p, label, span {
+        color: #f8fafc !important;
     }
     div[data-testid="stMetric"] {
-        background-color: #111827;
-        border: 1px solid #1f2937;
+        background-color: #08245c;
+        border: 1px solid #38bdf8;
         border-radius: 14px;
         padding: 14px;
     }
+    .debug-banner {
+        background: #0ea5e9;
+        color: #00111f !important;
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-weight: 800;
+        margin-bottom: 16px;
+        border: 2px solid #bae6fd;
+    }
     </style>
     """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f'<div class="debug-banner">RUNNING UPDATED APP: {APP_VERSION} — BLUE DEBUG MODE</div>',
     unsafe_allow_html=True,
 )
 
@@ -80,13 +96,21 @@ def get_price_data(ticker: str, period: str, interval: str) -> pd.DataFrame:
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
 
-    data = data.dropna(subset=["Open", "High", "Low", "Close"])
+    required_columns = ["Open", "High", "Low", "Close"]
+    missing_columns = [col for col in required_columns if col not in data.columns]
+    if missing_columns:
+        st.error(f"Missing expected yfinance columns: {missing_columns}")
+        st.write("Raw columns returned:", list(data.columns))
+        return pd.DataFrame()
+
+    data = data.dropna(subset=required_columns)
     return data
 
 
 profiles = load_profiles()
 
 st.sidebar.title("Stock Profiles")
+st.sidebar.caption(f"App version: {APP_VERSION}")
 
 selected_profile = st.sidebar.selectbox("Select Profile", list(profiles.keys()))
 
@@ -120,6 +144,16 @@ st.caption("Python + Streamlit + yfinance MVP")
 
 with st.spinner(f"Loading {selected_stock} market data..."):
     df = get_price_data(selected_stock, config["period"], config["interval"])
+
+with st.expander("Data connection check", expanded=True):
+    st.write(f"App version: `{APP_VERSION}`")
+    st.write(f"Ticker: `{selected_stock}`")
+    st.write(f"yfinance period: `{config['period']}`")
+    st.write(f"yfinance interval: `{config['interval']}`")
+    st.write(f"Rows returned: `{len(df)}`")
+    st.write(f"Columns returned: `{list(df.columns) if not df.empty else []}`")
+    if not df.empty:
+        st.dataframe(df.tail(10), use_container_width=True)
 
 if df.empty:
     st.error(
@@ -191,24 +225,17 @@ fig.update_layout(
     title=f"{selected_stock} • {selected_period} Chart",
     template="plotly_dark",
     height=760,
-    paper_bgcolor="#0b0f19",
-    plot_bgcolor="#0b0f19",
+    paper_bgcolor="#071f4f",
+    plot_bgcolor="#071f4f",
     margin=dict(l=20, r=20, t=55, b=25),
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     xaxis_rangeslider_visible=False,
 )
 
-fig.update_xaxes(showgrid=True, gridcolor="#1f2937")
-fig.update_yaxes(showgrid=True, gridcolor="#1f2937")
+fig.update_xaxes(showgrid=True, gridcolor="#1e3a8a")
+fig.update_yaxes(showgrid=True, gridcolor="#1e3a8a")
 fig.update_yaxes(title_text="Price", row=1, col=1)
 fig.update_yaxes(title_text="Volume", row=2, col=1)
 
 st.plotly_chart(fig, use_container_width=True)
-
-with st.expander("Data connection check"):
-    st.write(f"Ticker: `{selected_stock}`")
-    st.write(f"yfinance period: `{config['period']}`")
-    st.write(f"yfinance interval: `{config['interval']}`")
-    st.write(f"Rows returned: `{len(df)}`")
-    st.dataframe(df.tail(10), use_container_width=True)
