@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.7-bright-glass-edges"
+APP_VERSION = "v0.3.8-dramatic-bubble-outline"
 MAX_BUBBLES = 4
 PROFILE_PATH = Path("data/profiles.json")
 
@@ -73,37 +73,37 @@ st.markdown(
     h1,h2,h3,h4,p,label,span,div { color: #f8fafc; }
     section[data-testid="stSidebar"] * { color: #dbeafe !important; }
 
-    /* BUBBLE WINDOWS: brighter liquid-glass edge and internal glow. */
+    /* BUBBLE WINDOWS: intentionally dramatic frosted-glass contour. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background:
-            linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.03) 34%, rgba(96,165,250,.16)),
-            radial-gradient(circle at 16% 0%, rgba(219,234,254,.34), transparent 36%),
-            radial-gradient(circle at 92% 16%, rgba(125,211,252,.18), transparent 30%),
+            linear-gradient(145deg, rgba(255,255,255,.18), rgba(255,255,255,.045) 33%, rgba(96,165,250,.18)),
+            radial-gradient(circle at 14% 0%, rgba(248,250,252,.42), transparent 38%),
+            radial-gradient(circle at 92% 12%, rgba(186,230,253,.24), transparent 32%),
             linear-gradient(180deg, rgba(17,24,39,.955), rgba(15,23,42,.99)) !important;
-        border: 3px solid rgba(147,197,253,.72) !important;
-        border-radius: 30px !important;
-        outline: 1px solid rgba(239,246,255,.18) !important;
-        outline-offset: -5px !important;
+        border: 9px solid rgba(226,232,240,.78) !important;
+        border-radius: 34px !important;
+        outline: 2px solid rgba(255,255,255,.26) !important;
+        outline-offset: -8px !important;
         box-shadow:
-            0 28px 56px rgba(0,0,0,.46),
-            0 0 0 1px rgba(219,234,254,.18),
-            0 0 34px rgba(96,165,250,.38),
-            0 0 72px rgba(59,130,246,.20),
-            inset 0 1px 0 rgba(255,255,255,.30),
-            inset 0 0 28px rgba(147,197,253,.11),
-            inset 0 -28px 46px rgba(15,23,42,.50) !important;
+            0 32px 68px rgba(0,0,0,.52),
+            0 0 0 2px rgba(255,255,255,.16),
+            0 0 46px rgba(226,232,240,.36),
+            0 0 92px rgba(96,165,250,.26),
+            inset 0 2px 0 rgba(255,255,255,.46),
+            inset 0 0 34px rgba(226,232,240,.18),
+            inset 0 -34px 56px rgba(15,23,42,.54) !important;
         padding: 20px 22px 16px 22px !important;
-        margin-bottom: 28px !important;
+        margin-bottom: 32px !important;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]::before {
-        content: ""; display: block; height: 2px; border-radius: 999px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.62), rgba(191,219,254,.40), transparent);
-        filter: blur(.15px);
+        content: ""; display: block; height: 4px; border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), rgba(191,219,254,.58), transparent);
+        filter: blur(.2px);
         margin-bottom: 12px;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]::after {
-        content: ""; display: block; height: 1px; border-radius: 999px;
-        background: linear-gradient(90deg, rgba(96,165,250,.0), rgba(96,165,250,.34), rgba(96,165,250,.0));
+        content: ""; display: block; height: 2px; border-radius: 999px;
+        background: linear-gradient(90deg, rgba(226,232,240,.0), rgba(226,232,240,.46), rgba(96,165,250,.34), rgba(226,232,240,.0));
         margin-top: 10px;
     }
 
