@@ -10,18 +10,14 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-APP_VERSION = "v0.3.5-sidebar-restore"
+APP_VERSION = "v0.3.6-visual-contrast-borders"
 MAX_BUBBLES = 4
 PROFILE_PATH = Path("data/profiles.json")
 
 # Roadmap reminder: Technical Analysis, Fundamentals, News, Sector News,
 # Earnings/Cash Flow, AI Summary, Compare ticker, Related news, Open analysis.
 
-st.set_page_config(
-    page_title="Stock Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="Stock Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 PERIOD_CONFIG = {
     "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
@@ -38,56 +34,88 @@ st.markdown(
     """
     <style>
     .stApp {
-        background: radial-gradient(circle at 20% 0%, rgba(37,99,235,.16), transparent 32%), #0b1220;
+        background: radial-gradient(circle at 20% 0%, rgba(37,99,235,.18), transparent 32%), #0b1220;
         color: #f8fafc;
     }
-    header[data-testid="stHeader"] {
-        background: rgba(11,18,32,.85) !important;
-        backdrop-filter: blur(8px);
-    }
-    section[data-testid="stSidebar"] {
-        background: #0f172a;
-        border-right: 1px solid #2563eb;
-    }
+    header[data-testid="stHeader"] { background: rgba(11,18,32,.84) !important; backdrop-filter: blur(8px); }
+    section[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #2563eb; }
     .block-container { padding-top: 2.4rem; max-width: 1720px; }
     h1,h2,h3,h4,p,label,span,div { color: #f8fafc; }
     section[data-testid="stSidebar"] * { color: #dbeafe !important; }
 
-    /* Glass bubble containers. Uses Streamlit's real bordered containers. */
+    /* BUBBLE WINDOWS: stronger but still glassy/soft. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background:
-            linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.015) 38%, rgba(59,130,246,.08)),
-            radial-gradient(circle at 18% 0%, rgba(147,197,253,.22), transparent 34%),
-            linear-gradient(180deg, rgba(17,24,39,.94), rgba(15,23,42,.97)) !important;
-        border: 1px solid rgba(147,197,253,.34) !important;
-        border-radius: 26px !important;
-        box-shadow: 0 22px 42px rgba(0,0,0,.34), 0 0 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.12) !important;
+            linear-gradient(145deg, rgba(255,255,255,.085), rgba(255,255,255,.018) 40%, rgba(59,130,246,.12)),
+            radial-gradient(circle at 18% 0%, rgba(147,197,253,.28), transparent 36%),
+            linear-gradient(180deg, rgba(17,24,39,.96), rgba(15,23,42,.985)) !important;
+        border: 2px solid rgba(96,165,250,.58) !important;
+        border-radius: 28px !important;
+        box-shadow:
+            0 26px 52px rgba(0,0,0,.42),
+            0 0 0 1px rgba(219,234,254,.08),
+            0 0 34px rgba(37,99,235,.28),
+            inset 0 1px 0 rgba(255,255,255,.16),
+            inset 0 -24px 40px rgba(15,23,42,.44) !important;
         padding: 18px 20px 14px 20px !important;
-        margin-bottom: 22px !important;
+        margin-bottom: 24px !important;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]::before {
         content: ""; display: block; height: 1px; border-radius: 999px;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.32), transparent);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
         margin-bottom: 10px;
     }
 
-    /* High contrast controls. */
-    button, button *, .stButton button, .stButton button *, [data-testid^="baseButton"], [data-testid^="baseButton"] * {
-        color: #020617 !important; -webkit-text-fill-color: #020617 !important;
-        fill: #020617 !important; opacity: 1 !important; white-space: nowrap !important;
+    /* BUTTONS ONLY: keep readable text, avoid leaking into checkboxes/code blocks. */
+    div[data-testid="stButton"] button,
+    div[data-testid="stButton"] button * {
+        color: #020617 !important;
+        -webkit-text-fill-color: #020617 !important;
+        background-image: none !important;
+        text-shadow: none !important;
+        opacity: 1 !important;
+        white-space: nowrap !important;
     }
-    button, .stButton button, [data-testid^="baseButton"] {
-        background: #ffffff !important; border: 1px solid #60a5fa !important;
-        border-radius: 10px !important; font-weight: 850 !important; min-height: 38px !important;
+    div[data-testid="stButton"] button {
+        background: #ffffff !important;
+        border: 1px solid #60a5fa !important;
+        border-radius: 10px !important;
+        font-weight: 850 !important;
+        min-height: 38px !important;
     }
-    button:hover, .stButton button:hover { background: #dbeafe !important; border-color: #2563eb !important; }
-    button:disabled, button:disabled *, [disabled], [disabled] * {
-        background: #e2e8f0 !important; color: #334155 !important; -webkit-text-fill-color: #334155 !important; opacity: 1 !important;
+    div[data-testid="stButton"] button:hover { background: #dbeafe !important; border-color: #2563eb !important; }
+    div[data-testid="stButton"] button:disabled,
+    div[data-testid="stButton"] button:disabled * {
+        background: #e2e8f0 !important;
+        color: #334155 !important;
+        -webkit-text-fill-color: #334155 !important;
+        opacity: 1 !important;
     }
 
-    input, textarea, input *, textarea * {
-        color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important;
+    /* CHECKBOXES: visible selected state. */
+    div[data-testid="stCheckbox"] label,
+    div[data-testid="stCheckbox"] label * { color: #bfdbfe !important; font-weight: 700 !important; }
+    div[data-testid="stCheckbox"] input[type="checkbox"] {
+        accent-color: #60a5fa !important;
     }
+    div[data-testid="stCheckbox"] [data-baseweb="checkbox"] > div:first-child {
+        border: 2px solid #60a5fa !important;
+        background: #0f172a !important;
+    }
+    div[data-testid="stCheckbox"] [aria-checked="true"] > div:first-child,
+    div[data-testid="stCheckbox"] [data-checked="true"] > div:first-child {
+        background: #60a5fa !important;
+        border-color: #93c5fd !important;
+        box-shadow: 0 0 0 2px rgba(96,165,250,.25) !important;
+    }
+    div[data-testid="stCheckbox"] svg {
+        color: #020617 !important;
+        fill: #020617 !important;
+        stroke: #020617 !important;
+    }
+
+    /* Inputs and dropdowns. */
+    input, textarea, input *, textarea * { color: #020617 !important; -webkit-text-fill-color: #020617 !important; caret-color: #020617 !important; }
     input::placeholder, textarea::placeholder { color: #475569 !important; opacity: 1 !important; }
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > div {
         background: #ffffff !important; color: #020617 !important; border: 1px solid #cbd5e1 !important;
@@ -100,17 +128,25 @@ st.markdown(
     }
     div[role="option"]:hover, li[role="option"]:hover { background: #dbeafe !important; }
 
+    /* Expander and diagnostics: no black highlight leakage. */
     div[data-testid="stExpander"] { background: #111827 !important; border: 1px solid #334155 !important; border-radius: 14px !important; }
     div[data-testid="stExpander"] summary, div[data-testid="stExpander"] summary *, div[data-testid="stExpander"] details, div[data-testid="stExpander"] p, div[data-testid="stExpander"] span {
-        background: #111827 !important; color: #f8fafc !important; fill: #f8fafc !important;
+        background: transparent !important; color: #f8fafc !important; fill: #f8fafc !important;
     }
+    code, pre, code *, pre * {
+        background: #0f172a !important;
+        color: #86efac !important;
+        -webkit-text-fill-color: #86efac !important;
+        text-shadow: none !important;
+    }
+
     .bubble-title { font-size: 1.05rem; font-weight: 900; color: #f8fafc !important; margin-bottom: 4px; }
     .bubble-subtitle { font-size: .78rem; color: #93c5fd !important; margin-bottom: 10px; }
-    .bubble-footer { font-size: .75rem; color: #94a3b8 !important; border-top: 1px solid rgba(148,163,184,.22); margin-top: 8px; padding-top: 8px; }
-    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.28); border-radius: 16px; padding: 10px; }
+    .bubble-footer { font-size: .75rem; color: #94a3b8 !important; border-top: 1px solid rgba(148,163,184,.28); margin-top: 8px; padding-top: 8px; }
+    div[data-testid="stMetric"] { background: rgba(15,23,42,.92); border: 1px solid rgba(147,197,253,.35); border-radius: 16px; padding: 10px; }
     div[data-testid="stMetricLabel"] p { color: #93c5fd !important; font-weight: 700; }
     div[data-testid="stMetricValue"] { color: #f8fafc !important; }
-    .stRadio label, .stSelectbox label, .stTextInput label, .stCheckbox label { color: #bfdbfe !important; font-weight: 700; }
+    .stRadio label, .stSelectbox label, .stTextInput label { color: #bfdbfe !important; font-weight: 700; }
     </style>
     """,
     unsafe_allow_html=True,
