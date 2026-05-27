@@ -11,28 +11,22 @@ import streamlit as st
 import yfinance as yf
 from requests.exceptions import RequestException
 
-import data
 import charts
+import data
 import styles
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-APP_VERSION = "v0.5.1-single-timeframe-row"
+APP_VERSION = "v0.5.2-live-refresh-fix"
 MAX_BUBBLES = 4
+PRICE_CACHE_TTL_SECONDS = 60
 PROFILE_PATH = Path(__file__).parent / "data" / "profiles.json"
-BUBBLE_TYPES = ["Price Chart"]
-
-MARKET_OPEN_HOUR = 9.5
-MARKET_CLOSE_HOUR = 16
-TICKER_PATTERN = re.compile(r"^[A-Z0-9.\-]{1,5}$")
+TICKER_PATTERN = re.compile(r"^[A-Z0-9.\-]{1,8}$")
 
 PERIOD_CONFIG = {
-    "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[MARKET_CLOSE_HOUR, MARKET_OPEN_HOUR], pattern="hour")]},
-    "5D": {"period": "5d", "interval": "15m", "allow_ma": False, "rangebreaks": [dict(bounds=["sat", "mon"]), dict(bounds=[MARKET_CLOSE_HOUR, MARKET_OPEN_HOUR], pattern="hour")]},
+    "1D": {"period": "1d", "interval": "5m", "allow_ma": False, "rangebreaks": [dict(bounds=[16, 9.5], pattern="hour")]},
+    "5D": {"period": "5d", "interval": "15m", "allow_ma": False, "rangebreaks": [dict(bounds=["sat", "mon"]), dict(bounds=[16, 9.5], pattern="hour")]},
     "1M": {"period": "1mo", "interval": "1d", "allow_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
     "6M": {"period": "6mo", "interval": "1d", "allow_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
     "1Y": {"period": "1y", "interval": "1d", "allow_ma": True, "rangebreaks": [dict(bounds=["sat", "mon"])]},
@@ -48,58 +42,36 @@ def load_profiles() -> dict:
     try:
         if not PROFILE_PATH.exists():
             PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            default_profiles = {"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}
-            PROFILE_PATH.write_text(json.dumps(default_profiles, indent=2))
-            logger.info("Created default profiles")
-        profiles = json.loads(PROFILE_PATH.read_text())
-        logger.info(f"Loaded {len(profiles)} profiles")
-        return profiles
-    except IOError as e:
-        logger.error(f"Failed to load profiles: {e}")
-        return {"Default": ["NVDA"]}
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in profiles file: {e}")
+            PROFILE_PATH.write_text(json.dumps({"AI Stocks": ["NVDA", "AMD", "MSFT"], "Space": ["RKLB", "LUNR"]}, indent=2))
+        return json.loads(PROFILE_PATH.read_text())
+    except Exception as exc:
+        logger.error("Failed to load profiles: %s", exc)
         return {"Default": ["NVDA"]}
 
 
 def save_profiles(profiles: dict) -> None:
     try:
         PROFILE_PATH.write_text(json.dumps(profiles, indent=2))
-        logger.info("Profiles saved successfully")
-    except IOError as e:
-        logger.error(f"Failed to save profiles: {e}")
-        st.error(f"Failed to save profiles: {e}")
+    except Exception as exc:
+        st.error(f"Failed to save profiles: {exc}")
 
 
 def get_all_tickers(profiles: dict) -> list[str]:
-    return sorted({ticker for group in profiles.values() for ticker in group}) or ["NVDA"]
+    return sorted({ticker for tickers in profiles.values() for ticker in tickers}) or ["NVDA"]
 
 
 def validate_ticker(ticker: str) -> tuple[bool, str]:
     if not ticker:
         return False, "Ticker cannot be empty"
     if not TICKER_PATTERN.match(ticker):
-        return False, f"Invalid ticker format: '{ticker}'. Use 1-5 alphanumeric characters, hyphens, or periods."
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        _ = ticker_obj.info
-        logger.info(f"Validated ticker: {ticker}")
-        return True, "Valid ticker"
-    except (KeyError, IndexError) as e:
-        logger.warning(f"Ticker validation failed for {ticker}: {e}")
-        return False, f"Ticker '{ticker}' not found on Yahoo Finance"
-    except RequestException as e:
-        logger.warning(f"Network error validating ticker {ticker}: {e}")
-        return False, "Network error validating ticker (please try again)"
-    except Exception as e:
-        logger.error(f"Unexpected error validating ticker {ticker}: {e}")
-        return False, f"Error validating ticker: {str(e)}"
+        return False, f"Invalid ticker format: {ticker}"
+    return True, "Valid ticker format"
 
 
 def default_bubble(ticker: str = "NVDA") -> dict:
     return {
         "id": str(uuid.uuid4())[:8],
-        "ticker": ticker,
+        "ticker": ticker.upper().strip(),
         "timeframe": "6M",
         "bubble_type": "Price Chart",
         "show_ma": True,
@@ -107,120 +79,115 @@ def default_bubble(ticker: str = "NVDA") -> dict:
     }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_price_data(ticker: str, period: str, interval: str) -> tuple[pd.DataFrame, str, str]:
-    connector = "yfinance"
-    last_error = None
+def clear_price_caches() -> None:
+    get_price_data.clear()
+    get_live_quote.clear()
+
+
+@st.cache_data(ttl=PRICE_CACHE_TTL_SECONDS, show_spinner=False)
+def get_live_quote(ticker: str) -> dict:
+    quote = {"price": None, "prev_close": None, "open": None, "high": None, "low": None, "volume": None, "market_cap": None}
     try:
-        logger.info(f"Fetching {ticker} via yfinance (period={period}, interval={interval})")
-        df = yf.download(tickers=ticker, period=period, interval=interval, auto_adjust=False, progress=False, threads=False)
+        fast = yf.Ticker(ticker).fast_info
+        if fast:
+            quote.update({
+                "price": fast.get("last_price") or fast.get("regular_market_price"),
+                "prev_close": fast.get("previous_close") or fast.get("regular_market_previous_close"),
+                "open": fast.get("open") or fast.get("regular_market_open"),
+                "high": fast.get("day_high") or fast.get("regular_market_day_high"),
+                "low": fast.get("day_low") or fast.get("regular_market_day_low"),
+                "volume": fast.get("last_volume") or fast.get("regular_market_volume"),
+                "market_cap": fast.get("market_cap"),
+            })
+    except Exception as exc:
+        logger.warning("Live quote failed for %s: %s", ticker, exc)
+    return quote
+
+
+@st.cache_data(ttl=PRICE_CACHE_TTL_SECONDS, show_spinner=False)
+def get_price_data(ticker: str, period: str, interval: str) -> tuple[pd.DataFrame, str, str]:
+    try:
+        df = yf.download(tickers=ticker, period=period, interval=interval, auto_adjust=False, progress=False, threads=False, prepost=True)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
             df = df.dropna(subset=["Open", "High", "Low", "Close"])
         if not df.empty:
-            logger.info(f"yfinance returned {len(df)} rows for {ticker}")
-            return df, "OK", connector
-        logger.warning(f"yfinance returned empty data for {ticker}")
-        last_error = "yfinance returned no data"
-    except RequestException as e:
-        logger.warning(f"yfinance request error for {ticker}: {e}")
-        last_error = f"yfinance network error: {str(e)}"
-    except Exception as e:
-        logger.warning(f"yfinance error for {ticker}: {e}")
-        last_error = f"yfinance error: {str(e)}"
+            return df, "OK", "yfinance"
+    except RequestException as exc:
+        logger.warning("yfinance request failed for %s: %s", ticker, exc)
+    except Exception as exc:
+        logger.warning("yfinance failed for %s: %s", ticker, exc)
 
-    connector = "Yahoo Direct API"
     try:
-        logger.info(f"Falling back to Yahoo Direct API for {ticker}")
         df = data.yahoo_direct_request(ticker, interval, period)
         if not df.empty:
-            logger.info(f"Yahoo Direct API returned {len(df)} rows for {ticker}")
-            return df, "OK (via fallback)", connector
-        logger.warning(f"Yahoo Direct API returned empty data for {ticker}")
-        last_error = "Both connectors returned no data"
-    except RequestException as e:
-        logger.error(f"Yahoo Direct API request error for {ticker}: {e}")
-        last_error = f"Yahoo Direct API error: {str(e)}"
-    except Exception as e:
-        logger.error(f"Yahoo Direct API error for {ticker}: {e}")
-        last_error = f"Yahoo Direct API error: {str(e)}"
-
-    error_msg = f"Failed to fetch data: {last_error}"
-    logger.error(f"{error_msg} (ticker: {ticker})")
-    return pd.DataFrame(), error_msg, connector
+            return df, "OK (via fallback)", "Yahoo Direct API"
+    except Exception as exc:
+        logger.warning("Yahoo fallback failed for %s: %s", ticker, exc)
+    return pd.DataFrame(), "No price data returned", "No connector"
 
 
-def remove_bubble(bubble_id: str) -> bool:
+def choose(primary, fallback):
+    return primary if primary is not None and not pd.isna(primary) else fallback
+
+
+def remove_bubble(bubble_id: str) -> None:
     if len(st.session_state.bubbles) <= 1:
         st.warning("Keep at least one bubble.")
-        logger.info("Attempted to remove last bubble - operation blocked")
-        return False
+        return
     st.session_state.bubbles = [b for b in st.session_state.bubbles if b["id"] != bubble_id]
-    logger.info(f"Removed bubble {bubble_id}")
     st.rerun()
-    return True
 
 
-def duplicate_bubble(bubble: dict) -> bool:
+def duplicate_bubble(bubble: dict) -> None:
     if len(st.session_state.bubbles) >= MAX_BUBBLES:
         st.warning(f"Maximum of {MAX_BUBBLES} bubbles reached.")
-        logger.info(f"Attempted to duplicate bubble - max limit ({MAX_BUBBLES}) reached")
-        return False
+        return
     new_bubble = bubble.copy()
     new_bubble["id"] = str(uuid.uuid4())[:8]
     st.session_state.bubbles.append(new_bubble)
-    logger.info(f"Duplicated bubble {bubble['id']} to {new_bubble['id']}")
     st.rerun()
-    return True
 
 
 def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int) -> None:
     bubble_id = bubble["id"]
+    bubble["ticker"] = bubble["ticker"].upper().strip()
     config = PERIOD_CONFIG[bubble["timeframe"]]
 
     with st.container(border=True):
         with st.spinner(f"Loading {bubble['ticker']}..."):
             df, status, connector = get_price_data(bubble["ticker"], config["period"], config["interval"])
+            live_quote = get_live_quote(bubble["ticker"])
 
         if df.empty:
             st.warning(f"⚠️ {status}")
-            logger.warning(f"No data available for {bubble['ticker']}: {status}")
         else:
             stats = data.get_daily_quote_stats(df)
-            company_name = data.get_company_name(bubble["ticker"])
-            market_cap = data.get_market_cap(bubble["ticker"])
-            market_status = data.get_market_status()
-
-            latest_close = stats["close"]
-            prev_close = stats["prev_close"]
-            price_change = latest_close - prev_close if prev_close else 0
+            latest = choose(live_quote.get("price"), stats["close"])
+            prev_close = choose(live_quote.get("prev_close"), stats["prev_close"])
+            price_change = latest - prev_close if latest is not None and prev_close else 0
             pct_change = (price_change / prev_close * 100) if prev_close else 0
+            market_cap = live_quote.get("market_cap") or data.get_market_cap(bubble["ticker"])
 
-            st.markdown(
-                styles.get_bubble_header_html(
-                    ticker=bubble["ticker"],
-                    company_name=company_name,
-                    price=latest_close,
-                    price_change=price_change,
-                    pct_change=pct_change,
-                    market_status=market_status,
-                    last_update=datetime.now(),
-                ),
-                unsafe_allow_html=True,
-            )
+            st.markdown(styles.get_bubble_header_html(
+                ticker=bubble["ticker"],
+                company_name=data.get_company_name(bubble["ticker"]),
+                price=latest,
+                price_change=price_change,
+                pct_change=pct_change,
+                market_status=data.get_market_status(),
+                last_update=datetime.now(),
+            ), unsafe_allow_html=True)
 
-            st.markdown(
-                styles.get_stats_strip_html(
-                    open_price=stats["open"],
-                    high=stats["high"],
-                    low=stats["low"],
-                    prev_close=stats["prev_close"],
-                    volume=data.format_volume(stats["volume"]),
-                    market_cap=data.format_market_cap(market_cap),
-                ),
-                unsafe_allow_html=True,
-            )
+            st.markdown(styles.get_stats_strip_html(
+                open_price=choose(live_quote.get("open"), stats["open"]),
+                high=choose(live_quote.get("high"), stats["high"]),
+                low=choose(live_quote.get("low"), stats["low"]),
+                prev_close=prev_close,
+                volume=data.format_volume(choose(live_quote.get("volume"), stats["volume"])),
+                market_cap=data.format_market_cap(market_cap),
+            ), unsafe_allow_html=True)
 
             col_tf, col_menu = st.columns([0.7, 0.3])
             with col_tf:
@@ -228,38 +195,31 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int) -> No
                 tf_cols = st.columns(len(PERIOD_CONFIG))
                 for i, tf in enumerate(PERIOD_CONFIG.keys()):
                     with tf_cols[i]:
-                        if st.button(
-                            tf,
-                            key=f"tf_{bubble_id}_{tf}",
-                            use_container_width=True,
-                            disabled=(tf == bubble["timeframe"]),
-                        ):
+                        if st.button(tf, key=f"tf_{bubble_id}_{tf}", use_container_width=True, disabled=(tf == bubble["timeframe"])):
                             bubble["timeframe"] = tf
-                            logger.info(f"Changed timeframe to {tf} for bubble {bubble_id}")
+                            clear_price_caches()
                             st.rerun()
 
             with col_menu:
                 with st.expander("⚙️ Menu", expanded=False):
-                    selected_ticker = st.selectbox(
-                        "Stock ticker",
-                        all_tickers,
-                        index=all_tickers.index(bubble["ticker"]) if bubble["ticker"] in all_tickers else 0,
-                        key=f"ticker_{bubble_id}",
-                    )
+                    selected_ticker = st.selectbox("Stock ticker", all_tickers, index=all_tickers.index(bubble["ticker"]) if bubble["ticker"] in all_tickers else 0, key=f"ticker_{bubble_id}")
                     custom_ticker = st.text_input("Or type ticker", value="", key=f"custom_ticker_{bubble_id}")
                     show_ma = st.checkbox("Moving averages", value=bubble["show_ma"], key=f"ma_{bubble_id}")
                     show_volume = st.checkbox("Volume", value=bubble["show_volume"], key=f"volume_{bubble_id}")
 
-                    if st.button("Apply", key=f"apply_{bubble_id}", use_container_width=True):
-                        final_ticker = custom_ticker.upper().strip() or selected_ticker
-                        is_valid, validation_msg = validate_ticker(final_ticker)
-                        if not is_valid:
-                            st.error(validation_msg)
-                            logger.warning(f"Invalid ticker provided: {final_ticker}")
+                    if st.button("Apply / Refresh Ticker", key=f"apply_{bubble_id}", use_container_width=True):
+                        final_ticker = custom_ticker.upper().strip() or selected_ticker.upper().strip()
+                        ok, msg = validate_ticker(final_ticker)
+                        if not ok:
+                            st.error(msg)
                         else:
                             bubble.update({"ticker": final_ticker, "show_ma": show_ma, "show_volume": show_volume})
-                            logger.info(f"Updated bubble {bubble_id}: ticker={final_ticker}")
+                            clear_price_caches()
                             st.rerun()
+
+                    if st.button("Refresh This Bubble", key=f"refresh_{bubble_id}", use_container_width=True):
+                        clear_price_caches()
+                        st.rerun()
 
                     c1, c2 = st.columns([1.25, 1.0])
                     with c1:
@@ -272,12 +232,12 @@ def render_bubble(bubble: dict, all_tickers: list[str], chart_height: int) -> No
             st.plotly_chart(
                 charts.build_price_chart(df.copy(), bubble, config, chart_height),
                 use_container_width=True,
-                key=f"chart_{bubble_id}",
+                key=f"chart_{bubble_id}_{bubble['ticker']}_{bubble['timeframe']}_{int(time.time() // PRICE_CACHE_TTL_SECONDS)}",
                 config={"displayModeBar": "hover", "displaylogo": False},
             )
 
         st.markdown(
-            f'<div style="font-size: 0.75rem; color: #94a3b8; text-align: right; margin-top: 8px;">Source: {connector} · Status: {status} · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>',
+            f'<div style="font-size: 0.75rem; color: #94a3b8; text-align: right; margin-top: 8px;">Source: {connector} · Status: {status} · Quote TTL: {PRICE_CACHE_TTL_SECONDS}s · Updated: {time.strftime("%Y-%m-%d %H:%M:%S")}</div>',
             unsafe_allow_html=True,
         )
 
@@ -298,7 +258,7 @@ def render_layout(bubbles: list[dict], all_tickers: list[str], chart_height: int
         with top[1]:
             render_bubble(bubbles[1], all_tickers, chart_height)
         render_bubble(bubbles[2], all_tickers, chart_height)
-    elif count >= 4:
+    else:
         top, bottom = st.columns(2), st.columns(2)
         with top[0]:
             render_bubble(bubbles[0], all_tickers, chart_height)
@@ -312,14 +272,15 @@ def render_layout(bubbles: list[dict], all_tickers: list[str], chart_height: int
 
 profiles = load_profiles()
 all_tickers = get_all_tickers(profiles)
-
 if "bubbles" not in st.session_state:
     st.session_state.bubbles = [default_bubble(all_tickers[0])]
-    logger.info("Initialized session state with default bubble")
 
 st.sidebar.title("Stock Profiles")
 st.sidebar.caption(f"Version: {APP_VERSION}")
 selected_profile = st.sidebar.selectbox("Select Profile", list(profiles.keys()))
+if st.sidebar.button("Refresh All Prices"):
+    clear_price_caches()
+    st.rerun()
 
 new_ticker = st.sidebar.text_input("Add Ticker")
 if st.sidebar.button("Add To Profile"):
@@ -328,48 +289,34 @@ if st.sidebar.button("Add To Profile"):
         st.sidebar.error("Ticker cannot be empty")
     elif ticker in profiles[selected_profile]:
         st.sidebar.warning(f"{ticker} already in profile")
-        logger.info(f"Attempted to add duplicate ticker {ticker} to {selected_profile}")
     else:
-        is_valid, validation_msg = validate_ticker(ticker)
-        if not is_valid:
-            st.sidebar.error(validation_msg)
-            logger.warning(f"Invalid ticker {ticker} attempted to be added to profile: {validation_msg}")
+        ok, msg = validate_ticker(ticker)
+        if not ok:
+            st.sidebar.error(msg)
         else:
             profiles[selected_profile].append(ticker)
             save_profiles(profiles)
-            all_tickers = get_all_tickers(profiles)
             st.sidebar.success(f"Added {ticker}")
-            logger.info(f"Added ticker {ticker} to profile {selected_profile}")
             st.rerun()
 
 if st.sidebar.button("+ Add Bubble"):
     if len(st.session_state.bubbles) < MAX_BUBBLES:
         default_ticker = profiles[selected_profile][0] if profiles[selected_profile] else all_tickers[0]
         st.session_state.bubbles.append(default_bubble(default_ticker))
-        logger.info(f"Added new bubble with ticker {default_ticker}")
         st.rerun()
     else:
         st.sidebar.warning(f"Maximum of {MAX_BUBBLES} bubbles reached.")
-        logger.info(f"Attempted to add bubble - max limit ({MAX_BUBBLES}) reached")
 
 st.sidebar.caption(f"Active bubbles: {len(st.session_state.bubbles)} / {MAX_BUBBLES}")
-
 st.title("📈 Stock Dashboard")
 st.caption("TradingView-style bubble dashboard · Each bubble is an independent chart instance")
-
-count = len(st.session_state.bubbles)
-height = 520 if count <= 2 else 430
+height = 520 if len(st.session_state.bubbles) <= 2 else 430
 render_layout(st.session_state.bubbles, all_tickers, height)
 
 st.divider()
 st.subheader("Data connection check")
 with st.expander("Show diagnostics", expanded=False):
     st.write(f"App version: `{APP_VERSION}`")
+    st.write(f"Price cache TTL: `{PRICE_CACHE_TTL_SECONDS} seconds`")
     st.write(f"Active bubbles: `{len(st.session_state.bubbles)}`")
-    st.write(f"Profiles loaded: `{len(profiles)}`")
-    st.write(f"Unique tickers: `{len(all_tickers)}`")
-    st.write("Cache TTL: `3600 seconds (1 hour)`")
-    st.write("Bubble data:")
     st.json(st.session_state.bubbles)
-    st.write("Profile data:")
-    st.json(profiles)
